@@ -1,5 +1,15 @@
 package com.rteats.mpeineo.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Search
@@ -22,8 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.padding
 
 private enum class AppTab(val title: String) {
     SCHEDULE("Расписание"),
@@ -78,38 +86,58 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
             }
         },
     ) { innerPadding ->
-        when (tab) {
-            AppTab.SCHEDULE -> ScheduleScreen(
-                state = state,
-                onSelect = viewModel::selectTarget,
-                onToggleFavorite = viewModel::toggleFavorite,
-                onRefresh = viewModel::refresh,
-                onPreviousWeek = viewModel::previousWeek,
-                onNextWeek = viewModel::nextWeek,
-                onCurrentWeek = viewModel::currentWeek,
-                onOpenSearch = { tab = AppTab.SEARCH },
-                modifier = Modifier.padding(innerPadding),
-            )
+        AnimatedContent(
+            targetState = tab,
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize(),
+            transitionSpec = {
+                val forward = targetState.ordinal > initialState.ordinal
+                val enter = slideInHorizontally(
+                    animationSpec = tween(220),
+                    initialOffsetX = { width -> if (forward) width / 6 else -width / 6 },
+                ) + fadeIn(animationSpec = tween(180))
+                val exit = slideOutHorizontally(
+                    animationSpec = tween(180),
+                    targetOffsetX = { width -> if (forward) -width / 8 else width / 8 },
+                ) + fadeOut(animationSpec = tween(120))
+                enter togetherWith exit
+            },
+            label = "main-navigation",
+        ) { targetTab ->
+            when (targetTab) {
+                AppTab.SCHEDULE -> ScheduleScreen(
+                    state = state,
+                    onSelect = viewModel::selectTarget,
+                    onToggleFavorite = viewModel::toggleFavorite,
+                    onRefresh = viewModel::refresh,
+                    onPreviousWeek = viewModel::previousWeek,
+                    onNextWeek = viewModel::nextWeek,
+                    onCurrentWeek = viewModel::currentWeek,
+                    onOpenSearch = { tab = AppTab.SEARCH },
+                    modifier = Modifier.fillMaxSize(),
+                )
 
-            AppTab.SEARCH -> SearchScreen(
-                state = state,
-                onQueryChanged = viewModel::updateSearchQuery,
-                onTypeChanged = viewModel::setSearchType,
-                onSearch = viewModel::search,
-                onSelect = {
-                    viewModel.selectTarget(it)
-                    tab = AppTab.SCHEDULE
-                },
-                onToggleFavorite = viewModel::toggleFavorite,
-                modifier = Modifier.padding(innerPadding),
-            )
+                AppTab.SEARCH -> SearchScreen(
+                    state = state,
+                    onQueryChanged = viewModel::updateSearchQuery,
+                    onTypeChanged = viewModel::setSearchType,
+                    onSearch = viewModel::search,
+                    onSelect = {
+                        viewModel.selectTarget(it)
+                        tab = AppTab.SCHEDULE
+                    },
+                    onToggleFavorite = viewModel::toggleFavorite,
+                    modifier = Modifier.fillMaxSize(),
+                )
 
-            AppTab.SETTINGS -> SettingsScreen(
-                state = state,
-                onRefreshOnLaunchChanged = viewModel::setRefreshOnLaunch,
-                onClearCache = viewModel::clearCache,
-                modifier = Modifier.padding(innerPadding),
-            )
+                AppTab.SETTINGS -> SettingsScreen(
+                    state = state,
+                    onRefreshOnLaunchChanged = viewModel::setRefreshOnLaunch,
+                    onClearCache = viewModel::clearCache,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
     }
 }

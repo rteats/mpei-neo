@@ -9,6 +9,7 @@ import java.time.LocalDate
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -37,6 +38,20 @@ class ScheduleRepositoryTest {
 
         assertEquals(ScheduleSource.CACHE, result.source)
         assertEquals(100, result.week.fetchedAtEpochMillis)
+        assertFalse(remote.loadCalled)
+    }
+
+    @Test
+    fun cachedWeekReadsCacheWithoutCallingNetwork() = runBlocking {
+        val cached = sampleWeek(100)
+        val remote = FakeRemote(sampleWeek(200))
+        val repository = ScheduleRepository(remote, FakeCache(cached))
+
+        val result = repository.cachedWeek(target, weekStart)
+
+        assertNotNull(result)
+        assertEquals(ScheduleSource.CACHE, result?.source)
+        assertEquals(cached, result?.week)
         assertFalse(remote.loadCalled)
     }
 

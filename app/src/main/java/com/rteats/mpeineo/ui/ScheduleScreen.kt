@@ -13,10 +13,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
@@ -30,7 +34,6 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -39,17 +42,19 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.rteats.mpeineo.model.Lesson
+import com.rteats.mpeineo.model.ScheduleDay
 import com.rteats.mpeineo.model.ScheduleSource
 import com.rteats.mpeineo.model.ScheduleTarget
 import com.rteats.mpeineo.model.ScheduleWeek
@@ -57,6 +62,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @Composable
 internal fun ScheduleScreen(
@@ -280,55 +286,113 @@ private fun WeekNavigation(
 
 @Composable
 private fun ColumnScope.WeekContent(week: ScheduleWeek) {
-    var selectedDay by rememberSaveable(week.weekStart) {
-        mutableIntStateOf(
-            week.days.indexOfFirst {
-                it.date == LocalDate.now().toString()
-            }.takeIf { it >= 0 } ?: 0,
+    key(week.weekStart) {
+        WeekPager(week)
+    }
+}
+
+@Composable
+private fun ColumnScope.WeekPager(week: ScheduleWeek) {
+    val initialPage = remember(week.weekStart) {
+        week.days.indexOfFirst { it.date == LocalDate.now().toString() }
+            .takeIf { it >= 0 } ?: 0
+    }
+    val pagerState = rememberPagerState(
+        initialPage = initialPage,
+        pageCount = { week.days.size },
+    )
+    val scope = rememberCoroutineScope()
+
+    DaySelector(
+        week = week,
+        selectedDay = pagerState.currentPage,
+        onSelect = { index ->
+            scope.launch {
+                pagerState.animateScrollToPage(index)
+            }
+        },
+    )
+
+    HorizontalPager(
+        state = pagerState,
+        modifier = Modifier
+            .fillMaxWidth()
+            .weight(1f),
+    ) { page ->
+        DayPage(
+            day = week.days[page],
+            modifier = Modifier.fillMaxSize(),
         )
     }
+}
 
-    LaunchedEffect(week.weekStart) {
-        selectedDay = week.days.indexOfFirst {
-            it.date == LocalDate.now().toString()
-        }.takeIf { it >= 0 } ?: 0
-    }
-
-    LazyRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(vertical = 4.dp),
+@Composable
+private fun DaySelector(
+    week: ScheduleWeek,
+    selectedDay: Int,
+    onSelect: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        itemsIndexed(week.days) { index, day ->
+        week.days.forEachIndexed { index, day ->
             val date = LocalDate.parse(day.date)
-            FilterChip(
-                selected = selectedDay == index,
-                onClick = { selectedDay = index },
-                label = {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            date.dayOfWeek.getDisplayName(
-                                TextStyle.SHORT,
-                                Locale("ru"),
-                            ),
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                        Text(
-                            date.dayOfMonth.toString(),
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                },
-            )
+            val selected = index == selectedDay
+            val container = if (selected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLow
+            }
+            val content = if (selected) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onSelect(index) },
+                shape = RoundedCornerShape(10.dp),
+                color = container,
+                contentColor = content,
+            ) {
+                Column(
+                    modifier = Modifier.padding(vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = date.dayOfWeek
+                            .getDisplayName(TextStyle.SHORT, Locale("ru"))
+                            .take(2)
+                            .uppercase(Locale("ru")),
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        textAlign = TextAlign.Center,
+                    )
+                    Text(
+                        text = date.dayOfMonth.toString(),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1,
+                    )
+                }
+            }
         }
     }
+}
 
-    val day = week.days.getOrNull(selectedDay) ?: return
+@Composable
+private fun DayPage(
+    day: ScheduleDay,
+    modifier: Modifier = Modifier,
+) {
     if (day.lessons.isEmpty()) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
+            modifier = modifier,
             contentAlignment = Alignment.Center,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -345,29 +409,54 @@ private fun ColumnScope.WeekContent(week: ScheduleWeek) {
                 )
             }
         }
-    } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(top = 10.dp, bottom = 16.dp),
-        ) {
-            items(day.lessons) { lesson ->
-                LessonCard(lesson)
-            }
+        return
+    }
+
+    LazyColumn(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(top = 10.dp, bottom = 16.dp),
+    ) {
+        itemsIndexed(
+            items = day.lessons,
+            key = { index, lesson ->
+                "${index}:${lesson.startTime}:${lesson.name}:${lesson.place}"
+            },
+        ) { _, lesson ->
+            LessonCard(lesson)
         }
     }
 }
 
 @Composable
 private fun LessonCard(lesson: Lesson) {
+    val accent = lessonAccent(lesson.kind)
+    val kindContainer = lerp(
+        MaterialTheme.colorScheme.surfaceContainerHighest,
+        accent,
+        0.16f,
+    )
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
         ),
     ) {
-        Row(modifier = Modifier.padding(16.dp)) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
             Surface(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(54.dp),
+                shape = RoundedCornerShape(100),
+                color = accent,
+            ) {}
+
+            Surface(
+                modifier = Modifier.padding(start = 10.dp),
                 shape = MaterialTheme.shapes.medium,
                 color = MaterialTheme.colorScheme.primaryContainer,
             ) {
@@ -388,9 +477,10 @@ private fun LessonCard(lesson: Lesson) {
                     )
                 }
             }
+
             Column(
                 modifier = Modifier
-                    .padding(start = 14.dp)
+                    .padding(start = 12.dp)
                     .weight(1f),
             ) {
                 Text(
@@ -399,11 +489,18 @@ private fun LessonCard(lesson: Lesson) {
                     fontWeight = FontWeight.SemiBold,
                 )
                 if (lesson.kind.isNotBlank()) {
-                    Text(
-                        lesson.kind,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
+                    Surface(
+                        modifier = Modifier.padding(top = 5.dp),
+                        shape = RoundedCornerShape(100),
+                        color = kindContainer,
+                    ) {
+                        Text(
+                            lesson.kind,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
                 }
                 if (lesson.place.isNotBlank()) {
                     Text(
@@ -429,6 +526,29 @@ private fun LessonCard(lesson: Lesson) {
             }
         }
     }
+}
+
+@Composable
+private fun lessonAccent(kind: String): Color {
+    val scheme = MaterialTheme.colorScheme
+    val normalized = kind.lowercase(Locale("ru"))
+
+    val anchor = when {
+        "лаб" in normalized || "lab" in normalized ->
+            Color(0xFFEF5350)
+        "лек" in normalized || "lecture" in normalized ->
+            Color(0xFF66BB6A)
+        "сем" in normalized || "практ" in normalized ||
+            "seminar" in normalized || "practice" in normalized ->
+            Color(0xFFFFCA28)
+        "конс" in normalized || "экзам" in normalized ||
+            "зач" in normalized || "exam" in normalized ->
+            return scheme.onSurfaceVariant
+        else ->
+            return scheme.primary
+    }
+
+    return lerp(anchor, scheme.primary, 0.18f)
 }
 
 @Composable

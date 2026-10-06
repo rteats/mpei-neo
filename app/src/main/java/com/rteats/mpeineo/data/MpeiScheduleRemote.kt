@@ -8,15 +8,20 @@ import com.rteats.mpeineo.model.ScheduleWeek
 import java.io.IOException
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import kotlinx.coroutines.Dispatchers
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 
 internal data class RemoteSearchDto(
     val id: Long,
@@ -51,7 +56,15 @@ class MpeiScheduleRemote(
         } else {
             coroutineScope {
                 val results = ScheduleTargetType.entries.map { requestedType ->
-                    async { runCatching { searchTyped(query.trim(), requestedType) } }
+                    async {
+                        try {
+                            Result.success(searchTyped(query.trim(), requestedType))
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (error: Throwable) {
+                            Result.failure(error)
+                        }
+                    }
                 }.awaitAll()
                 val successful = results.mapNotNull { it.getOrNull() }
                 if (successful.isEmpty()) {
@@ -92,8 +105,9 @@ class MpeiScheduleRemote(
         val listType = object : TypeToken<List<RemoteSearchDto>>() {}.type
         val items: List<RemoteSearchDto> = gson.fromJson(body, listType)
         return items.mapNotNull { dto ->
-            val parsedType = ScheduleTargetType.entries.firstOrNull { it.apiName == dto.type.lowercase() }
-                ?: type
+            val parsedType = ScheduleTargetType.entries.firstOrNull {
+                it.apiName == dto.type.lowercase()
+            } ?: type
             ScheduleTarget(
                 id = dto.id,
                 name = dto.label.trim(),
@@ -103,17 +117,43 @@ class MpeiScheduleRemote(
         }
     }
 
-    private suspend fun get(url: HttpUrl): String = withContext(Dispatchers.IO) {
+    private suspend fun get(url: HttpUrl): String = suspendCancellableCoroutine { continuation ->
         val request = Request.Builder()
             .url(url)
             .header("Accept", "application/json")
-            .header("User-Agent", "MPEI-Neo/0.1 Android")
+            .header("User-Agent", "MPEI-Neo/0.2 Android")
             .build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                throw IOException("MPEI timetable returned HTTP ${response.code}")
-            }
-            response.body?.string() ?: throw IOException("Empty MPEI timetable response")
-        }
+
+        val call = client.newCall(request)
+        continuation.invokeOnCancellation { call.cancel() }
+
+        call.enqueue(
+            object : Callback {
+                override fun onFailure(call: Call, error: IOException) {
+                    if (continuation.isActive) {
+                        continuation.resumeWithException(error)
+                    }
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    try {
+                        response.use {
+                            if (!it.isSuccessful) {
+                                throw IOException("MPEI timetable returned HTTP ${it.code}")
+                            }
+                            val body = it.body?.string()
+                                ?: throw IOException("Empty MPEI timetable response")
+                            if (continuation.isActive) {
+                                continuation.resume(body)
+                            }
+                        }
+                    } catch (error: Throwable) {
+                        if (continuation.isActive) {
+                            continuation.resumeWithException(error)
+                        }
+                    }
+                }
+            },
+        )
     }
 }

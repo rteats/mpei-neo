@@ -13,6 +13,12 @@ class ScheduleRepository(
     suspend fun search(query: String, type: ScheduleTargetType?): List<ScheduleTarget> =
         remote.search(query, type)
 
+    suspend fun cachedWeek(
+        target: ScheduleTarget,
+        weekStart: LocalDate,
+    ): ScheduleLoad? =
+        cache.read(target, weekStart)?.let { ScheduleLoad(it, ScheduleSource.CACHE) }
+
     suspend fun loadWeek(
         target: ScheduleTarget,
         weekStart: LocalDate,
