@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.rteats.mpeineo.BuildConfig
 
 @Composable
 internal fun SettingsScreen(
@@ -67,7 +68,7 @@ internal fun SettingsScreen(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        "Если выключено, приложение использует кэш до ручного обновления.",
+                        "Если выключено, приложение использует кэш до обновления жестом вниз.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -128,7 +129,7 @@ internal fun SettingsScreen(
         HorizontalDivider()
 
         Text(
-            "MPEI Neo",
+            "MPEI Neo ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
         )

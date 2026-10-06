@@ -4,6 +4,7 @@ import com.google.gson.GsonBuilder
 import com.rteats.mpeineo.model.ScheduleTarget
 import com.rteats.mpeineo.model.ScheduleTargetType
 import java.time.LocalDate
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -24,7 +25,10 @@ class MpeiScheduleRemoteTest {
         server = MockWebServer()
         server.start()
         remote = MpeiScheduleRemote(
-            client = OkHttpClient(),
+            client = OkHttpClient.Builder()
+                .callTimeout(300, TimeUnit.MILLISECONDS)
+                .retryOnConnectionFailure(false)
+                .build(),
             gson = GsonBuilder().create(),
             baseUrl = server.url("/api/"),
         )
@@ -126,5 +130,32 @@ class MpeiScheduleRemoteTest {
             request.requestUrl?.queryParameter("finish"),
         )
         assertTrue(request.getHeader("User-Agent")!!.startsWith("MPEI-Neo/"))
+    }
+
+    @Test
+    fun transientFailureRetriesOnce() = runBlocking {
+        server.enqueue(
+            MockResponse().setResponseCode(503),
+        )
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody("[]"),
+        )
+
+        val target = ScheduleTarget(
+            id = 99,
+            name = "А-12-23",
+            description = "",
+            type = ScheduleTargetType.GROUP,
+        )
+
+        val week = remote.loadWeek(
+            target = target,
+            weekStart = LocalDate.of(2026, 10, 5),
+        )
+
+        assertEquals(7, week.days.size)
+        assertEquals(2, server.requestCount)
     }
 }

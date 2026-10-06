@@ -14,6 +14,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.Call
 import okhttp3.Callback
@@ -117,43 +118,65 @@ class MpeiScheduleRemote(
         }
     }
 
-    private suspend fun get(url: HttpUrl): String = suspendCancellableCoroutine { continuation ->
-        val request = Request.Builder()
-            .url(url)
-            .header("Accept", "application/json")
-            .header("User-Agent", "MPEI-Neo/0.2 Android")
-            .build()
+    private suspend fun get(url: HttpUrl): String {
+        var lastError: IOException? = null
 
-        val call = client.newCall(request)
-        continuation.invokeOnCancellation { call.cancel() }
-
-        call.enqueue(
-            object : Callback {
-                override fun onFailure(call: Call, error: IOException) {
-                    if (continuation.isActive) {
-                        continuation.resumeWithException(error)
-                    }
+        repeat(2) { attempt ->
+            try {
+                return getOnce(url)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: IOException) {
+                lastError = error
+                if (attempt == 0) {
+                    delay(200)
                 }
+            }
+        }
 
-                override fun onResponse(call: Call, response: Response) {
-                    try {
-                        response.use {
-                            if (!it.isSuccessful) {
-                                throw IOException("MPEI timetable returned HTTP ${it.code}")
-                            }
-                            val body = it.body?.string()
-                                ?: throw IOException("Empty MPEI timetable response")
-                            if (continuation.isActive) {
-                                continuation.resume(body)
-                            }
-                        }
-                    } catch (error: Throwable) {
+        throw lastError ?: IOException("MPEI timetable request failed")
+    }
+
+    private suspend fun getOnce(url: HttpUrl): String =
+        suspendCancellableCoroutine { continuation ->
+            val request = Request.Builder()
+                .url(url)
+                .header("Accept", "application/json")
+                .header("User-Agent", "MPEI-Neo/0.2 Android")
+                .build()
+
+            val call = client.newCall(request)
+            continuation.invokeOnCancellation { call.cancel() }
+
+            call.enqueue(
+                object : Callback {
+                    override fun onFailure(call: Call, error: IOException) {
                         if (continuation.isActive) {
                             continuation.resumeWithException(error)
                         }
                     }
-                }
-            },
-        )
-    }
+
+                    override fun onResponse(call: Call, response: Response) {
+                        try {
+                            response.use {
+                                if (!it.isSuccessful) {
+                                    throw IOException(
+                                        "MPEI timetable returned HTTP ${it.code}",
+                                    )
+                                }
+                                val body = it.body?.string()
+                                    ?: throw IOException("Empty MPEI timetable response")
+                                if (continuation.isActive) {
+                                    continuation.resume(body)
+                                }
+                            }
+                        } catch (error: Throwable) {
+                            if (continuation.isActive) {
+                                continuation.resumeWithException(error)
+                            }
+                        }
+                    }
+                },
+            )
+        }
 }
