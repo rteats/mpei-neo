@@ -66,7 +66,9 @@ import com.rteats.mpeineo.model.ScheduleSource
 import com.rteats.mpeineo.model.ScheduleTarget
 import com.rteats.mpeineo.model.ScheduleWeek
 import java.time.DayOfWeek
+import java.time.Duration
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.time.temporal.TemporalAdjusters
@@ -164,17 +166,14 @@ internal fun ScheduleScreen(
             return
         }
 
-        ScheduleHeader(
+        ScheduleOverviewRow(
             target = selected,
             isFavorite = state.favorites.any {
                 it.id == selected.id && it.type == selected.type
             },
             source = state.source,
-            onToggleFavorite = { onToggleFavorite(selected) },
-        )
-
-        WeekNavigation(
             weekOffset = state.weekOffset,
+            onToggleFavorite = { onToggleFavorite(selected) },
             onPreviousWeek = onPreviousWeek,
             onNextWeek = onNextWeek,
             onCurrentWeek = onCurrentWeek,
@@ -199,16 +198,50 @@ internal fun ScheduleScreen(
 }
 
 @Composable
+private fun ScheduleOverviewRow(
+    target: ScheduleTarget,
+    isFavorite: Boolean,
+    source: ScheduleSource?,
+    weekOffset: Int,
+    onToggleFavorite: () -> Unit,
+    onPreviousWeek: () -> Unit,
+    onNextWeek: () -> Unit,
+    onCurrentWeek: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        ScheduleHeader(
+            target = target,
+            isFavorite = isFavorite,
+            source = source,
+            onToggleFavorite = onToggleFavorite,
+            modifier = Modifier.weight(1.25f),
+        )
+        WeekNavigation(
+            weekOffset = weekOffset,
+            onPreviousWeek = onPreviousWeek,
+            onNextWeek = onNextWeek,
+            onCurrentWeek = onCurrentWeek,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
 private fun ScheduleHeader(
     target: ScheduleTarget,
     isFavorite: Boolean,
     source: ScheduleSource?,
     onToggleFavorite: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 10.dp),
+        modifier = modifier,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         ),
@@ -216,29 +249,33 @@ private fun ScheduleHeader(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 6.dp),
+                .padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     target.name,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         target.type.displayName,
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
                     )
                     source?.let {
                         Text(
                             if (it == ScheduleSource.CACHE) "из кэша" else "обновлено",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
                         )
                     }
                 }
@@ -259,11 +296,10 @@ private fun WeekNavigation(
     onPreviousWeek: () -> Unit,
     onNextWeek: () -> Unit,
     onCurrentWeek: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 8.dp)
+        modifier = modifier
             .pointerInput(weekOffset) {
                 var totalDrag = 0f
                 detectHorizontalDragGestures(
@@ -286,7 +322,7 @@ private fun WeekNavigation(
         color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             AnimatedContent(
@@ -307,18 +343,21 @@ private fun WeekNavigation(
             ) { offset ->
                 Text(
                     formatWeekRange(weekStartForOffset(offset)),
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
                 )
             }
             if (weekOffset != 0) {
                 Text(
-                    "На текущую неделю",
+                    "Текущая неделя",
                     modifier = Modifier
                         .padding(top = 2.dp)
                         .clickable(onClick = onCurrentWeek),
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center,
                 )
             }
         }
@@ -490,11 +529,26 @@ private fun DayPage(
             key = { index, lesson ->
                 "${index}:${lesson.startTime}:${lesson.name}:${lesson.place}"
             },
-        ) { _, lesson ->
-            LessonCard(lesson)
+        ) { index, lesson ->
+            Column {
+                if (
+                    index > 0 &&
+                    isOneHourBreak(day.lessons[index - 1], lesson)
+                ) {
+                    Spacer(Modifier.height(48.dp))
+                }
+                LessonCard(lesson)
+            }
         }
     }
 }
+
+private fun isOneHourBreak(previous: Lesson, next: Lesson): Boolean =
+    runCatching {
+        val end = LocalTime.parse(previous.endTime)
+        val start = LocalTime.parse(next.startTime)
+        Duration.between(end, start).toMinutes() == 60L
+    }.getOrDefault(false)
 
 @Composable
 private fun LessonCard(lesson: Lesson) {
