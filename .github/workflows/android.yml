@@ -160,11 +160,7 @@ jobs:
             adb logcat -c
             adb shell monkey -p com.rteats.mpeineo -c android.intent.category.LAUNCHER 1
             sleep 5
-            if ! adb shell pidof com.rteats.mpeineo >/dev/null; then
-              echo "::error::Release APK crashed on launch"
-              adb logcat -d '*:E'
-              exit 1
-            fi
+            adb shell pidof com.rteats.mpeineo >/dev/null || { echo "::error::Release APK crashed on launch"; adb logcat -d '*:E'; exit 1; }
 
       - name: Upload instrumentation reports on failure
         if: failure()
