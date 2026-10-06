@@ -232,7 +232,14 @@ class MainViewModel(
                 }
                 if (!forceNetwork) return@launch
             } else if (matchesCurrentSelection(target, offset)) {
-                _state.update { it.copy(isLoading = true, error = null) }
+                _state.update {
+                    it.copy(
+                        week = null,
+                        source = null,
+                        isLoading = true,
+                        error = null,
+                    )
+                }
             }
 
             try {

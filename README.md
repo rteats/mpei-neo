@@ -6,9 +6,11 @@ Lightweight native Android timetable client for MPEI, written with Jetpack Compo
 
 - Search lesson schedules by **group**, **teacher**, or **classroom**.
 - Open any search result and browse its schedule week by week.
+- Swipe between weekdays; swipe the week-range header to move between weeks.
 - Save schedules to **Quick access** and switch between them without searching again.
 - Offline-first file cache for already loaded weeks.
-- Setting to either refresh the selected schedule on every app launch or stay cache-first until the user taps Refresh.
+- Setting to either refresh the selected schedule on every app launch or stay cache-first.
+- Pull down on a loaded schedule to refresh it manually.
 - Dynamic Material You / Monet color scheme on Android 12+; system light/dark mode is respected.
 - No BARS credentials, Firebase, analytics, advertising SDKs, or account requirement.
 
@@ -21,6 +23,8 @@ The app talks directly to the public MPEI timetable API used by the MpeiX backen
 
 The upstream timetable API is currently HTTP-only. Android cleartext traffic is therefore disabled globally and explicitly allowed only for `ts.mpei.ru` in `network_security_config.xml`.
 
+Transient timetable I/O failures are retried once automatically. Superseded schedule/search calls are cancelled.
+
 ## Architecture
 
 - Single lightweight Android app module.
@@ -32,7 +36,7 @@ The upstream timetable API is currently HTTP-only. Android cleartext traffic is 
 
 ## Tests
 
-- JVM tests validate typed API search, classroom schedule loading, cache-first behavior, forced refresh, cache writes, and offline fallback.
+- JVM tests validate typed API search, classroom schedule loading, transient network retry, cache-first behavior, forced refresh, cache writes, cancellation, and offline fallback.
 - Instrumented Compose smoke test validates navigation.
 - LeakCanary instrumentation test closes `MainActivity` and fails if application leaks are retained.
 
@@ -41,9 +45,22 @@ The upstream timetable API is currently HTTP-only. Android cleartext traffic is 
 `.github/workflows/android.yml` runs on pushes and pull requests:
 
 1. Unit tests + Android lint.
-2. Debug APK build.
+2. Feature branches/PRs build an **optimized release APK** signed with an ephemeral test key, so UI smoothness can be tested without debug-build overhead.
 3. Emulator UI tests + LeakCanary heap assertion.
-4. On a successful push to `main`, the verified APK is automatically published as a GitHub prerelease named `MPEI Neo build <run number>`.
+4. A successful push to `main` builds a **minified/shrunk release APK**, assigns a monotonically increasing CI `versionCode`, signs it using GitHub Actions secrets, and publishes it as a GitHub prerelease.
+
+Main builds use versions such as `0.2.<GitHub run number>`. With one persistent release key in GitHub Actions secrets, future GitHub Release APKs update in place.
+
+Required repository Actions secrets:
+
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+
+The signing key must never be committed to the repository. Keep a secure backup: losing it means future APKs cannot update installations signed by that key.
+
+Because older CI debug APKs were signed by runner-specific debug keys, moving from an already-installed old debug APK to the first stable-signed main release requires one uninstall/reinstall. After that transition, release-to-release updates can install over the existing app.
 
 ## Local build
 
@@ -53,8 +70,12 @@ Use Android Studio Rabbit 1 / AGP 9.4 compatible tooling, JDK 17, Android SDK 36
 gradle testDebugUnitTest lintDebug assembleDebug
 ```
 
-The APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
+For an optimized local test build signed with the local debug key:
+
+```bash
+gradle assembleRelease -PTEST_RELEASE_SIGNING=true -PVERSION_CODE=2 -PVERSION_NAME=0.2.2-test
+```
 
 ## Status
 
-Initial schedule-focused release. BARS, maps, mail, QR attendance, and other large features from MpeiX / MpeiApp are intentionally outside this first lightweight scope.
+Schedule-focused prerelease. BARS, maps, mail, QR attendance, and other large features from MpeiX / MpeiApp are intentionally outside the current lightweight scope.
