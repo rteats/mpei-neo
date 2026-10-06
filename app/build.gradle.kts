@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.rteats.mpeineo"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.rteats.mpeineo"
