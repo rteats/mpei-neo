@@ -46,8 +46,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             signingConfig = when {
                 releaseSigningReady -> signingConfigs.getByName("ciRelease")
                 testReleaseSigning -> signingConfigs.getByName("debug")

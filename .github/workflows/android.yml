@@ -152,7 +152,15 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          script: gradle --no-daemon connectedDebugAndroidTest
+          script: |
+            gradle --no-daemon connectedDebugAndroidTest
+            gradle --no-daemon assembleRelease -PTEST_RELEASE_SIGNING=true -PVERSION_CODE=${{ github.run_number }} -PVERSION_NAME=0.2.${{ github.run_number }}-smoke
+            adb install -r app/build/outputs/apk/release/app-release.apk
+            adb shell am force-stop com.rteats.mpeineo
+            adb logcat -c
+            adb shell monkey -p com.rteats.mpeineo -c android.intent.category.LAUNCHER 1
+            sleep 5
+            adb shell pidof com.rteats.mpeineo >/dev/null || { echo "::error::Release APK crashed on launch"; adb logcat -d '*:E'; exit 1; }
 
       - name: Upload instrumentation reports on failure
         if: failure()

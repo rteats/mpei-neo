@@ -1,5 +1,7 @@
 package com.rteats.mpeineo.model
 
+import com.google.gson.annotations.SerializedName
+
 enum class ScheduleTargetType(val apiName: String, val displayName: String) {
     GROUP("group", "Группа"),
     PERSON("person", "Преподаватель"),
@@ -7,32 +9,32 @@ enum class ScheduleTargetType(val apiName: String, val displayName: String) {
 }
 
 data class ScheduleTarget(
-    val id: Long,
-    val name: String,
-    val description: String = "",
-    val type: ScheduleTargetType,
+    @SerializedName("id") val id: Long,
+    @SerializedName("name") val name: String,
+    @SerializedName("description") val description: String = "",
+    @SerializedName("type") val type: ScheduleTargetType,
 )
 
 data class Lesson(
-    val name: String,
-    val kind: String,
-    val startTime: String,
-    val endTime: String,
-    val place: String,
-    val lecturer: String,
-    val groups: String,
+    @SerializedName("name") val name: String,
+    @SerializedName("kind") val kind: String,
+    @SerializedName("startTime") val startTime: String,
+    @SerializedName("endTime") val endTime: String,
+    @SerializedName("place") val place: String,
+    @SerializedName("lecturer") val lecturer: String,
+    @SerializedName("groups") val groups: String,
 )
 
 data class ScheduleDay(
-    val date: String,
-    val lessons: List<Lesson>,
+    @SerializedName("date") val date: String,
+    @SerializedName("lessons") val lessons: List<Lesson>,
 )
 
 data class ScheduleWeek(
-    val target: ScheduleTarget,
-    val weekStart: String,
-    val days: List<ScheduleDay>,
-    val fetchedAtEpochMillis: Long,
+    @SerializedName("target") val target: ScheduleTarget,
+    @SerializedName("weekStart") val weekStart: String,
+    @SerializedName("days") val days: List<ScheduleDay>,
+    @SerializedName("fetchedAtEpochMillis") val fetchedAtEpochMillis: Long,
 )
 
 enum class ScheduleSource {

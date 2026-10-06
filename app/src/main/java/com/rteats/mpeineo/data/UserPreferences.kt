@@ -8,6 +8,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.rteats.mpeineo.model.ScheduleTarget
+import com.rteats.mpeineo.model.isUsable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -26,7 +27,11 @@ class UserPreferences(
     }
 
     val selected: Flow<ScheduleTarget?> = context.dataStore.data.map { prefs ->
-        prefs[selectedKey]?.let { runCatching { gson.fromJson(it, ScheduleTarget::class.java) }.getOrNull() }
+        prefs[selectedKey]?.let { raw ->
+            runCatching { gson.fromJson(raw, ScheduleTarget::class.java) }
+                .getOrNull()
+                ?.takeIf { it.isUsable() }
+        }
     }
 
     val refreshOnLaunch: Flow<Boolean> = context.dataStore.data.map { prefs ->
@@ -53,6 +58,8 @@ class UserPreferences(
     private fun decodeFavorites(raw: String?): List<ScheduleTarget> {
         if (raw.isNullOrBlank()) return emptyList()
         val type = object : TypeToken<List<ScheduleTarget>>() {}.type
-        return runCatching { gson.fromJson<List<ScheduleTarget>>(raw, type) }.getOrDefault(emptyList())
+        return runCatching { gson.fromJson<List<ScheduleTarget>>(raw, type) }
+            .getOrDefault(emptyList())
+            .filter { it.isUsable() }
     }
 }

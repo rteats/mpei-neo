@@ -45,9 +45,9 @@ Transient timetable I/O failures are retried once automatically. Superseded sche
 `.github/workflows/android.yml` runs on pushes and pull requests:
 
 1. Unit tests + Android lint.
-2. Feature branches/PRs build an **optimized release APK** signed with an ephemeral test key, so UI smoothness can be tested without debug-build overhead.
-3. Emulator UI tests + LeakCanary heap assertion.
-4. A successful push to `main` builds a **minified/shrunk release APK**, assigns a monotonically increasing CI `versionCode`, signs it using GitHub Actions secrets, and publishes it as a GitHub prerelease.
+2. Feature branches/PRs build a **release APK** signed with an ephemeral test key, so UI smoothness can be tested without debug-build overhead.
+3. Emulator UI tests + LeakCanary heap assertion, followed by installing and launching the release APK as a runtime smoke test.
+4. A successful push to `main` builds a **release APK**, assigns a monotonically increasing CI `versionCode`, signs it using GitHub Actions secrets, and publishes it as a GitHub prerelease.
 
 Main builds use versions such as `0.2.<GitHub run number>`. With one persistent release key in GitHub Actions secrets, future GitHub Release APKs update in place.
 
