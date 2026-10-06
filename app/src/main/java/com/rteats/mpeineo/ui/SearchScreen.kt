@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.DateRange
@@ -27,9 +29,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.rteats.mpeineo.model.ScheduleTarget
@@ -45,18 +56,45 @@ internal fun SearchScreen(
     onToggleFavorite: (ScheduleTarget) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var fieldValue by remember {
+        mutableStateOf(TextFieldValue(state.searchQuery))
+    }
+
+    LaunchedEffect(state.searchQuery) {
+        if (state.searchQuery != fieldValue.text) {
+            fieldValue = TextFieldValue(
+                text = state.searchQuery,
+                selection = TextRange(state.searchQuery.length),
+            )
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
     ) {
         OutlinedTextField(
-            value = state.searchQuery,
-            onValueChange = onQueryChanged,
+            value = fieldValue,
+            onValueChange = { updated ->
+                fieldValue = updated
+                if (updated.text != state.searchQuery) {
+                    onQueryChanged(updated.text)
+                }
+            },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 12.dp),
+                .padding(top = 12.dp)
+                .onFocusChanged { focusState ->
+                    if (focusState.isFocused && fieldValue.text.isNotEmpty()) {
+                        fieldValue = fieldValue.copy(
+                            selection = TextRange(0, fieldValue.text.length),
+                        )
+                    }
+                },
             singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { onSearch() }),
             label = {
                 Text("Группа, преподаватель или аудитория")
             },
