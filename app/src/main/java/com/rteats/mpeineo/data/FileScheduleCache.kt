@@ -36,6 +36,7 @@ class FileScheduleCache(
 
     override suspend fun clear() = withContext(Dispatchers.IO) {
         directory.deleteRecursively()
+        Unit
     }
 
     private fun fileFor(target: ScheduleTarget, weekStart: LocalDate): File {
