@@ -5,6 +5,7 @@ import com.rteats.mpeineo.model.ScheduleSource
 import com.rteats.mpeineo.model.ScheduleTarget
 import com.rteats.mpeineo.model.ScheduleTargetType
 import java.time.LocalDate
+import kotlinx.coroutines.CancellationException
 
 class ScheduleRepository(
     private val remote: ScheduleRemoteDataSource,
@@ -12,6 +13,12 @@ class ScheduleRepository(
 ) {
     suspend fun search(query: String, type: ScheduleTargetType?): List<ScheduleTarget> =
         remote.search(query, type)
+
+    suspend fun cachedWeek(
+        target: ScheduleTarget,
+        weekStart: LocalDate,
+    ): ScheduleLoad? =
+        cache.read(target, weekStart)?.let { ScheduleLoad(it, ScheduleSource.CACHE) }
 
     suspend fun loadWeek(
         target: ScheduleTarget,
@@ -23,11 +30,13 @@ class ScheduleRepository(
             return ScheduleLoad(cached, ScheduleSource.CACHE)
         }
 
-        return runCatching {
+        return try {
             val fresh = remote.loadWeek(target, weekStart)
             cache.write(fresh)
             ScheduleLoad(fresh, ScheduleSource.NETWORK)
-        }.getOrElse { error ->
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
             if (cached != null) ScheduleLoad(cached, ScheduleSource.CACHE) else throw error
         }
     }

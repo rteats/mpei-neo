@@ -12,6 +12,9 @@ import com.rteats.mpeineo.model.ScheduleWeek
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.temporal.TemporalAdjusters
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,6 +45,9 @@ class MainViewModel(
     private val _state = MutableStateFlow(MainUiState())
     val state: StateFlow<MainUiState> = _state.asStateFlow()
 
+    private var searchJob: Job? = null
+    private var loadJob: Job? = null
+
     init {
         viewModelScope.launch {
             container.preferences.favorites.collect { favorites ->
@@ -64,35 +70,47 @@ class MainViewModel(
     }
 
     fun updateSearchQuery(query: String) {
-        _state.update { it.copy(searchQuery = query, searchError = null) }
+        _state.update {
+            it.copy(
+                searchQuery = query,
+                searchError = null,
+            )
+        }
+
+        if (query.trim().length < 2) {
+            searchJob?.cancel()
+            _state.update {
+                it.copy(
+                    searchResults = emptyList(),
+                    isSearching = false,
+                )
+            }
+            return
+        }
+
+        scheduleSearch(delayMillis = 200)
     }
 
     fun setSearchType(type: ScheduleTargetType?) {
-        _state.update { it.copy(searchType = type) }
+        _state.update { it.copy(searchType = type, searchError = null) }
+        if (state.value.searchQuery.trim().length >= 2) {
+            scheduleSearch(delayMillis = 0)
+        }
     }
 
     fun search() {
         val query = state.value.searchQuery.trim()
         if (query.length < 2) {
-            _state.update { it.copy(searchError = "Введите минимум 2 символа") }
+            searchJob?.cancel()
+            _state.update {
+                it.copy(
+                    isSearching = false,
+                    searchError = "Введите минимум 2 символа",
+                )
+            }
             return
         }
-        viewModelScope.launch {
-            _state.update { it.copy(isSearching = true, searchError = null) }
-            runCatching { container.repository.search(query, state.value.searchType) }
-                .onSuccess { results ->
-                    _state.update { it.copy(isSearching = false, searchResults = results) }
-                }
-                .onFailure { error ->
-                    _state.update {
-                        it.copy(
-                            isSearching = false,
-                            searchResults = emptyList(),
-                            searchError = error.message ?: "Не удалось выполнить поиск",
-                        )
-                    }
-                }
-        }
+        scheduleSearch(delayMillis = 0)
     }
 
     fun selectTarget(target: ScheduleTarget) {
@@ -150,36 +168,110 @@ class MainViewModel(
         }
     }
 
-    private fun loadWeek(forceNetwork: Boolean) {
-        val target = state.value.selected ?: return
-        val offset = state.value.weekOffset
-        viewModelScope.launch {
-            _state.update { it.copy(isLoading = true, error = null) }
-            val weekStart = mondayFor(LocalDate.now()).plusWeeks(offset.toLong())
-            runCatching {
-                container.repository.loadWeek(
-                    target = target,
-                    weekStart = weekStart,
-                    forceNetwork = forceNetwork,
-                )
-            }.onSuccess { load: ScheduleLoad ->
-                _state.update {
-                    it.copy(
-                        week = load.week,
-                        source = load.source,
-                        isLoading = false,
-                        error = null,
-                    )
+    private fun scheduleSearch(delayMillis: Long) {
+        searchJob?.cancel()
+        val query = state.value.searchQuery.trim()
+        val type = state.value.searchType
+
+        searchJob = viewModelScope.launch {
+            if (delayMillis > 0) delay(delayMillis)
+            if (state.value.searchQuery.trim() != query || state.value.searchType != type) return@launch
+
+            _state.update { it.copy(isSearching = true, searchError = null) }
+
+            try {
+                val results = container.repository.search(query, type)
+                if (state.value.searchQuery.trim() == query && state.value.searchType == type) {
+                    _state.update {
+                        it.copy(
+                            isSearching = false,
+                            searchResults = results,
+                            searchError = null,
+                        )
+                    }
                 }
-            }.onFailure { error ->
-                _state.update {
-                    it.copy(
-                        isLoading = false,
-                        error = error.message ?: "Не удалось загрузить расписание",
-                    )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                if (state.value.searchQuery.trim() == query && state.value.searchType == type) {
+                    _state.update {
+                        it.copy(
+                            isSearching = false,
+                            searchResults = emptyList(),
+                            searchError = error.message ?: "Не удалось выполнить поиск",
+                        )
+                    }
                 }
             }
         }
+    }
+
+    private fun loadWeek(forceNetwork: Boolean) {
+        val target = state.value.selected ?: return
+        val offset = state.value.weekOffset
+        val weekStart = mondayFor(LocalDate.now()).plusWeeks(offset.toLong())
+
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
+            val cached = try {
+                container.repository.cachedWeek(target, weekStart)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Throwable) {
+                null
+            }
+
+            if (cached != null && matchesCurrentSelection(target, offset)) {
+                _state.update {
+                    it.copy(
+                        week = cached.week,
+                        source = cached.source,
+                        isLoading = forceNetwork,
+                        error = null,
+                    )
+                }
+                if (!forceNetwork) return@launch
+            } else if (matchesCurrentSelection(target, offset)) {
+                _state.update { it.copy(isLoading = true, error = null) }
+            }
+
+            try {
+                val load: ScheduleLoad = container.repository.loadWeek(
+                    target = target,
+                    weekStart = weekStart,
+                    forceNetwork = true,
+                )
+                if (matchesCurrentSelection(target, offset)) {
+                    _state.update {
+                        it.copy(
+                            week = load.week,
+                            source = load.source,
+                            isLoading = false,
+                            error = null,
+                        )
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                if (matchesCurrentSelection(target, offset)) {
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            error = error.message ?: "Не удалось загрузить расписание",
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun matchesCurrentSelection(target: ScheduleTarget, offset: Int): Boolean {
+        val current = state.value
+        val selected = current.selected ?: return false
+        return selected.id == target.id &&
+            selected.type == target.type &&
+            current.weekOffset == offset
     }
 
     private fun mondayFor(date: LocalDate): LocalDate =

@@ -6,10 +6,13 @@ import com.rteats.mpeineo.model.ScheduleTarget
 import com.rteats.mpeineo.model.ScheduleTargetType
 import com.rteats.mpeineo.model.ScheduleWeek
 import java.time.LocalDate
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class ScheduleRepositoryTest {
@@ -41,6 +44,20 @@ class ScheduleRepositoryTest {
     }
 
     @Test
+    fun cachedWeekReadsCacheWithoutCallingNetwork() = runBlocking {
+        val cached = sampleWeek(100)
+        val remote = FakeRemote(sampleWeek(200))
+        val repository = ScheduleRepository(remote, FakeCache(cached))
+
+        val result = repository.cachedWeek(target, weekStart)
+
+        assertNotNull(result)
+        assertEquals(ScheduleSource.CACHE, result?.source)
+        assertEquals(cached, result?.week)
+        assertFalse(remote.loadCalled)
+    }
+
+    @Test
     fun forcedRefreshWritesFreshNetworkValue() = runBlocking {
         val cached = sampleWeek(100)
         val fresh = sampleWeek(200)
@@ -58,6 +75,27 @@ class ScheduleRepositoryTest {
         assertEquals(200, result.week.fetchedAtEpochMillis)
         assertTrue(remote.loadCalled)
         assertEquals(fresh, cache.value)
+    }
+
+    @Test
+    fun cancellationDoesNotFallBackToCache() = runBlocking {
+        val cached = sampleWeek(100)
+        val remote = FakeRemote(
+            week = sampleWeek(200),
+            cancelLoad = true,
+        )
+        val repository = ScheduleRepository(remote, FakeCache(cached))
+
+        try {
+            repository.loadWeek(
+                target = target,
+                weekStart = weekStart,
+                forceNetwork = true,
+            )
+            fail("CancellationException should propagate")
+        } catch (_: CancellationException) {
+            // Expected: superseded network work must stop instead of returning stale cache.
+        }
     }
 
     @Test
@@ -96,6 +134,7 @@ class ScheduleRepositoryTest {
     private class FakeRemote(
         private val week: ScheduleWeek,
         private val failLoad: Boolean = false,
+        private val cancelLoad: Boolean = false,
     ) : ScheduleRemoteDataSource {
         var loadCalled = false
 
@@ -109,6 +148,7 @@ class ScheduleRepositoryTest {
             weekStart: LocalDate,
         ): ScheduleWeek {
             loadCalled = true
+            if (cancelLoad) throw CancellationException("cancelled")
             if (failLoad) error("network down")
             return week
         }
