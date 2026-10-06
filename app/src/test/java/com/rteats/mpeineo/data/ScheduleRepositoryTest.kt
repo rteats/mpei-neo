@@ -6,11 +6,13 @@ import com.rteats.mpeineo.model.ScheduleTarget
 import com.rteats.mpeineo.model.ScheduleTargetType
 import com.rteats.mpeineo.model.ScheduleWeek
 import java.time.LocalDate
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class ScheduleRepositoryTest {
@@ -76,6 +78,27 @@ class ScheduleRepositoryTest {
     }
 
     @Test
+    fun cancellationDoesNotFallBackToCache() = runBlocking {
+        val cached = sampleWeek(100)
+        val remote = FakeRemote(
+            week = sampleWeek(200),
+            cancelLoad = true,
+        )
+        val repository = ScheduleRepository(remote, FakeCache(cached))
+
+        try {
+            repository.loadWeek(
+                target = target,
+                weekStart = weekStart,
+                forceNetwork = true,
+            )
+            fail("CancellationException should propagate")
+        } catch (_: CancellationException) {
+            // Expected: superseded network work must stop instead of returning stale cache.
+        }
+    }
+
+    @Test
     fun networkFailureFallsBackToExistingCache() = runBlocking {
         val cached = sampleWeek(100)
         val remote = FakeRemote(
@@ -111,6 +134,7 @@ class ScheduleRepositoryTest {
     private class FakeRemote(
         private val week: ScheduleWeek,
         private val failLoad: Boolean = false,
+        private val cancelLoad: Boolean = false,
     ) : ScheduleRemoteDataSource {
         var loadCalled = false
 
@@ -124,6 +148,7 @@ class ScheduleRepositoryTest {
             weekStart: LocalDate,
         ): ScheduleWeek {
             loadCalled = true
+            if (cancelLoad) throw CancellationException("cancelled")
             if (failLoad) error("network down")
             return week
         }
