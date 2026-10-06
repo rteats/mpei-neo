@@ -47,7 +47,7 @@ The upstream timetable API is currently HTTP-only. Android cleartext traffic is 
 
 ## Local build
 
-Use Android Studio Rabbit 1 / AGP 9.4 compatible tooling, JDK 17, Android SDK 36, and Gradle 9.6:
+Use Android Studio Rabbit 1 / AGP 9.4 compatible tooling, JDK 17, Android SDK 37, and Gradle 9.6:
 
 ```bash
 gradle testDebugUnitTest lintDebug assembleDebug
