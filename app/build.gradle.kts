@@ -16,21 +16,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    signingConfigs {
-        create("ciDebug") {
-            storeFile = rootProject.file("ci/release-debug.keystore")
-            storePassword = "mpei-neo-debug"
-            keyAlias = "mpei-neo"
-            keyPassword = "mpei-neo-debug"
-        }
-    }
-
     buildTypes {
-        debug {
-            if (rootProject.file("ci/release-debug.keystore").exists()) {
-                signingConfig = signingConfigs.getByName("ciDebug")
-            }
-        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -69,9 +55,9 @@ dependencies {
     implementation(composeBom)
     androidTestImplementation(composeBom)
 
-    implementation("androidx.activity:activity-compose:1.13.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
+    implementation("androidx.activity:activity-compose:1.14.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.12.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.12.0")
     implementation("androidx.datastore:datastore-preferences:1.2.1")
 
     implementation("androidx.compose.ui:ui")
