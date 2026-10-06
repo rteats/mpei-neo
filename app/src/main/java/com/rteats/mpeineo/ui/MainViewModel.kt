@@ -268,8 +268,9 @@ class MainViewModel(
 
     private fun matchesCurrentSelection(target: ScheduleTarget, offset: Int): Boolean {
         val current = state.value
-        return current.selected?.id == target.id &&
-            current.selected.type == target.type &&
+        val selected = current.selected ?: return false
+        return selected.id == target.id &&
+            selected.type == target.type &&
             current.weekOffset == offset
     }
 
