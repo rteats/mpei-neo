@@ -1,5 +1,6 @@
 package com.rteats.mpeineo.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -11,13 +12,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -40,20 +39,22 @@ private enum class AppTab {
 fun MpeiNeoApp(viewModel: MainViewModel) {
     var tab by rememberSaveable { mutableStateOf(AppTab.SCHEDULE) }
 
+    BackHandler(enabled = tab == AppTab.SEARCH) {
+        tab = AppTab.SCHEDULE
+    }
+
     Scaffold(
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
-                    selected = tab == AppTab.SCHEDULE,
+                    selected = tab == AppTab.SCHEDULE || tab == AppTab.SEARCH,
                     onClick = { tab = AppTab.SCHEDULE },
-                    icon = { Icon(Icons.Default.DateRange, contentDescription = null) },
-                    label = { Text("Расписание") },
-                )
-                NavigationBarItem(
-                    selected = tab == AppTab.SEARCH,
-                    onClick = { tab = AppTab.SEARCH },
-                    icon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    label = { Text("Поиск") },
+                    icon = {
+                        Icon(
+                            Icons.Default.DateRange,
+                            contentDescription = "Расписание",
+                        )
+                    },
                 )
                 NavigationBarItem(
                     selected = tab == AppTab.BARS,
@@ -61,10 +62,9 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_nav_bars),
-                            contentDescription = null,
+                            contentDescription = "БАРС",
                         )
                     },
-                    label = { Text("БАРС") },
                 )
                 NavigationBarItem(
                     selected = tab == AppTab.MAIL,
@@ -72,16 +72,19 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_nav_mail),
-                            contentDescription = null,
+                            contentDescription = "Почта",
                         )
                     },
-                    label = { Text("Почта") },
                 )
                 NavigationBarItem(
                     selected = tab == AppTab.SETTINGS,
                     onClick = { tab = AppTab.SETTINGS },
-                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                    label = { Text("Настройки") },
+                    icon = {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = "Настройки",
+                        )
+                    },
                 )
             }
         },
