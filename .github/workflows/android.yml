@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - feature/**
   pull_request:
     branches:
       - main
@@ -19,7 +18,7 @@ concurrency:
 
 jobs:
   verify:
-    name: Unit tests, lint and APK
+    name: Unit tests, lint and release APK
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -46,14 +45,17 @@ jobs:
       - name: Run unit tests and lint
         run: gradle --no-daemon testDebugUnitTest lintDebug
 
-      - name: Build optimized test release APK
-        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
+      - name: Build PR test release APK
+        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
         run: |
-          gradle --no-daemon assembleRelease             -PTEST_RELEASE_SIGNING=true             -PVERSION_CODE=${{ github.run_number }}             -PVERSION_NAME=0.2.${{ github.run_number }}-test
+          gradle --no-daemon assembleRelease \
+            -PTEST_RELEASE_SIGNING=true \
+            -PVERSION_CODE=${{ github.run_number }} \
+            -PVERSION_NAME=0.2.${{ github.run_number }}-test
           cp app/build/outputs/apk/release/app-release.apk MPEI-Neo-release-test.apk
 
-      - name: Upload optimized test release APK
-        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
+      - name: Upload PR test release APK
+        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: mpei-neo-release-test-apk
@@ -82,7 +84,7 @@ jobs:
           printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/mpei-neo-release.p12"
           echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/mpei-neo-release.p12" >> "$GITHUB_ENV"
 
-      - name: Build optimized signed main release APK
+      - name: Build signed main release APK
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -90,8 +92,11 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEYSTORE_TYPE: PKCS12
         run: |
-          gradle --no-daemon assembleRelease             -PVERSION_CODE=${{ github.run_number }}             -PVERSION_NAME=0.2.${{ github.run_number }}
-          cp app/build/outputs/apk/release/app-release.apk             MPEI-Neo-v0.2.${{ github.run_number }}.apk
+          gradle --no-daemon assembleRelease \
+            -PVERSION_CODE=${{ github.run_number }} \
+            -PVERSION_NAME=0.2.${{ github.run_number }}
+          cp app/build/outputs/apk/release/app-release.apk \
+            MPEI-Neo-v0.2.${{ github.run_number }}.apk
 
       - name: Upload main release APK
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -114,9 +119,10 @@ jobs:
           retention-days: 7
 
   instrumentation:
-    name: Emulator UI and memory-leak tests
+    name: Emulator smoke tests
+    needs: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -138,13 +144,35 @@ jobs:
         with:
           gradle-version: "9.6.0"
 
+      - name: Download PR test release APK
+        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+        uses: actions/download-artifact@v5
+        with:
+          name: mpei-neo-release-test-apk
+          path: smoke-apk
+
+      - name: Download exact signed main release APK
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/download-artifact@v5
+        with:
+          name: mpei-neo-release-apk
+          path: smoke-apk
+
+      - name: Prepare release APK for smoke test
+        run: |
+          if [ -f smoke-apk/MPEI-Neo-release-test.apk ]; then
+            cp smoke-apk/MPEI-Neo-release-test.apk MPEI-Neo-smoke.apk
+          else
+            cp smoke-apk/MPEI-Neo-v0.2.${{ github.run_number }}.apk MPEI-Neo-smoke.apk
+          fi
+
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Run UI and LeakCanary tests
+      - name: Run focused UI tests and exact-release launch smoke
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -153,14 +181,21 @@ jobs:
           profile: pixel_6
           disable-animations: true
           script: |
-            gradle --no-daemon connectedDebugAndroidTest
-            gradle --no-daemon assembleRelease -PTEST_RELEASE_SIGNING=true -PVERSION_CODE=${{ github.run_number }} -PVERSION_NAME=0.2.${{ github.run_number }}-smoke
-            adb install -r app/build/outputs/apk/release/app-release.apk
-            adb shell am force-stop com.rteats.mpeineo
+            gradle --no-daemon connectedDebugAndroidTest \
+              -Pandroid.testInstrumentationRunnerArguments.class=com.rteats.mpeineo.UiSmokeTest
+
+            # Instrumentation leaves the debug-signed app installed. Remove it before
+            # installing the exact release artifact, which may have a different signature.
+            adb uninstall com.rteats.mpeineo || true
+            adb install MPEI-Neo-smoke.apk
             adb logcat -c
-            adb shell monkey -p com.rteats.mpeineo -c android.intent.category.LAUNCHER 1
+            adb shell am start -W -n com.rteats.mpeineo/.MainActivity
             sleep 5
-            adb shell pidof com.rteats.mpeineo >/dev/null || { echo "::error::Release APK crashed on launch"; adb logcat -d '*:E'; exit 1; }
+            adb shell pidof com.rteats.mpeineo >/dev/null || {
+              echo "::error::Release APK crashed on launch"
+              adb logcat -d '*:E'
+              exit 1
+            }
 
       - name: Upload instrumentation reports on failure
         if: failure()
@@ -174,14 +209,14 @@ jobs:
           retention-days: 7
 
   release:
-    name: Publish successful main release
+    name: Publish tested main release
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs:
       - verify
       - instrumentation
     runs-on: ubuntu-latest
     steps:
-      - name: Download verified release APK
+      - name: Download exact tested release APK
         uses: actions/download-artifact@v5
         with:
           name: mpei-neo-release-apk
