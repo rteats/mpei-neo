@@ -190,11 +190,7 @@ jobs:
             adb logcat -c
             adb shell am start -W -n com.rteats.mpeineo/.MainActivity
             sleep 5
-            adb shell pidof com.rteats.mpeineo >/dev/null || {
-              echo "::error::Release APK crashed on launch"
-              adb logcat -d '*:E'
-              exit 1
-            }
+            adb shell pidof com.rteats.mpeineo >/dev/null
 
       - name: Upload instrumentation reports on failure
         if: failure()
