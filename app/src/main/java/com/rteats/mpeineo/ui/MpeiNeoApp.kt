@@ -151,11 +151,13 @@ private fun AppContent(
 
             AppTab.BARS -> WebPortalScreen(
                 url = "https://bars.mpei.ru",
+                testTag = "portal-bars",
                 modifier = Modifier.fillMaxSize(),
             )
 
             AppTab.MAIL -> WebPortalScreen(
                 url = "https://mail.mpei.ru/owa",
+                testTag = "portal-mail",
                 modifier = Modifier.fillMaxSize(),
             )
 
