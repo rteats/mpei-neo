@@ -53,8 +53,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           script: |
-            gradle --no-daemon connectedDebugAndroidTest \
-              -Pandroid.testInstrumentationRunnerArguments.class=com.rteats.mpeineo.MemoryLeakTest
+            gradle --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.rteats.mpeineo.MemoryLeakTest
 
       - name: Upload leak reports on failure
         if: failure()
