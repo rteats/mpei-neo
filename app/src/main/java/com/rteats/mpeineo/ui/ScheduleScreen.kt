@@ -122,7 +122,10 @@ internal fun ScheduleScreen(
                             modifier = Modifier.padding(top = 6.dp, bottom = 16.dp),
                         )
                         Button(onClick = onOpenSearch) {
-                            Icon(Icons.Default.Search, contentDescription = null)
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = "Поиск расписания",
+                            )
                             Spacer(Modifier.size(8.dp))
                             Text("Открыть поиск")
                         }
