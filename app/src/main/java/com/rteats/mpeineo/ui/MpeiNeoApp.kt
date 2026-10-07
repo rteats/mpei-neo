@@ -25,10 +25,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import com.rteats.mpeineo.R
 
 private enum class AppTab {
     SCHEDULE,
     SEARCH,
+    BARS,
+    MAIL,
     SETTINGS,
 }
 
@@ -50,6 +54,28 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
                     onClick = { tab = AppTab.SEARCH },
                     icon = { Icon(Icons.Default.Search, contentDescription = null) },
                     label = { Text("Поиск") },
+                )
+                NavigationBarItem(
+                    selected = tab == AppTab.BARS,
+                    onClick = { tab = AppTab.BARS },
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_nav_bars),
+                            contentDescription = null,
+                        )
+                    },
+                    label = { Text("БАРС") },
+                )
+                NavigationBarItem(
+                    selected = tab == AppTab.MAIL,
+                    onClick = { tab = AppTab.MAIL },
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_nav_mail),
+                            contentDescription = null,
+                        )
+                    },
+                    label = { Text("Почта") },
                 )
                 NavigationBarItem(
                     selected = tab == AppTab.SETTINGS,
@@ -120,6 +146,16 @@ private fun AppContent(
                     onTabChanged(AppTab.SCHEDULE)
                 },
                 onToggleFavorite = viewModel::toggleFavorite,
+                modifier = Modifier.fillMaxSize(),
+            )
+
+            AppTab.BARS -> WebPortalScreen(
+                url = "https://bars.mpei.ru",
+                modifier = Modifier.fillMaxSize(),
+            )
+
+            AppTab.MAIL -> WebPortalScreen(
+                url = "https://mail.mpei.ru/owa",
                 modifier = Modifier.fillMaxSize(),
             )
 
