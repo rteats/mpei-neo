@@ -22,8 +22,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -34,10 +32,11 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Star
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,9 +47,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -93,39 +95,6 @@ internal fun ScheduleScreen(
             .fillMaxSize()
             .padding(horizontal = 16.dp),
     ) {
-        if (state.favorites.isNotEmpty()) {
-            Text(
-                text = "Быстрый доступ",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp, bottom = 6.dp),
-            )
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(
-                    items = state.favorites,
-                    key = { it.type.apiName + ":" + it.id },
-                ) { target ->
-                    AssistChip(
-                        onClick = { onSelect(target) },
-                        label = {
-                            Text(
-                                target.name,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.Star,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        },
-                    )
-                }
-            }
-        }
-
         val selected = state.selected
         if (selected == null) {
             Box(
@@ -166,17 +135,15 @@ internal fun ScheduleScreen(
             return
         }
 
-        ScheduleOverviewRow(
+        ScheduleTargetSelector(
             target = selected,
+            favorites = state.favorites,
             isFavorite = state.favorites.any {
                 it.id == selected.id && it.type == selected.type
             },
             source = state.source,
-            weekOffset = state.weekOffset,
+            onSelect = onSelect,
             onToggleFavorite = { onToggleFavorite(selected) },
-            onPreviousWeek = onPreviousWeek,
-            onNextWeek = onNextWeek,
-            onCurrentWeek = onCurrentWeek,
         )
 
         if (state.isLoading && state.week == null) {
@@ -190,175 +157,143 @@ internal fun ScheduleScreen(
         state.week?.let { week ->
             WeekContent(
                 week = week,
+                weekOffset = state.weekOffset,
                 isRefreshing = state.isLoading,
                 onRefresh = onRefresh,
+                onPreviousWeek = onPreviousWeek,
+                onNextWeek = onNextWeek,
+                onCurrentWeek = onCurrentWeek,
             )
         }
     }
 }
 
 @Composable
-private fun ScheduleOverviewRow(
+private fun ScheduleTargetSelector(
     target: ScheduleTarget,
+    favorites: List<ScheduleTarget>,
     isFavorite: Boolean,
     source: ScheduleSource?,
-    weekOffset: Int,
+    onSelect: (ScheduleTarget) -> Unit,
     onToggleFavorite: () -> Unit,
-    onPreviousWeek: () -> Unit,
-    onNextWeek: () -> Unit,
-    onCurrentWeek: () -> Unit,
 ) {
-    Row(
+    var expanded by remember(target.id, target.type) { mutableStateOf(false) }
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 8.dp, bottom = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.Top,
     ) {
-        ScheduleHeader(
-            target = target,
-            isFavorite = isFavorite,
-            source = source,
-            onToggleFavorite = onToggleFavorite,
-            modifier = Modifier.weight(1.25f),
-        )
-        WeekNavigation(
-            weekOffset = weekOffset,
-            onPreviousWeek = onPreviousWeek,
-            onNextWeek = onNextWeek,
-            onCurrentWeek = onCurrentWeek,
-            modifier = Modifier.weight(1f),
-        )
-    }
-}
-
-@Composable
-private fun ScheduleHeader(
-    target: ScheduleTarget,
-    isFavorite: Boolean,
-    source: ScheduleSource?,
-    onToggleFavorite: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        ),
-    ) {
-        Row(
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .clickable { expanded = true },
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ),
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    target.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        target.type.displayName,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
+                        target.name,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                    source?.let {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
-                            if (it == ScheduleSource.CACHE) "из кэша" else "обновлено",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            target.type.displayName,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
                             maxLines = 1,
                         )
+                        source?.let {
+                            Text(
+                                if (it == ScheduleSource.CACHE) "из кэша" else "обновлено",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                            )
+                        }
                     }
+                    Text(
+                        if (favorites.isEmpty()) {
+                            "Нет избранных • нажмите, чтобы открыть список"
+                        } else {
+                            "Избранное: ${favorites.size} • нажмите, чтобы выбрать"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
                 }
-            }
-            IconButton(onClick = onToggleFavorite) {
-                Icon(
-                    if (isFavorite) Icons.Default.Star else Icons.Outlined.Star,
-                    contentDescription = "Быстрый доступ",
+                Text(
+                    "▾",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp),
                 )
+                IconButton(onClick = onToggleFavorite) {
+                    Icon(
+                        if (isFavorite) Icons.Default.Star else Icons.Outlined.Star,
+                        contentDescription = "Быстрый доступ",
+                    )
+                }
             }
         }
-    }
-}
 
-@Composable
-private fun WeekNavigation(
-    weekOffset: Int,
-    onPreviousWeek: () -> Unit,
-    onNextWeek: () -> Unit,
-    onCurrentWeek: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier
-            .pointerInput(weekOffset) {
-                var totalDrag = 0f
-                detectHorizontalDragGestures(
-                    onDragStart = { totalDrag = 0f },
-                    onDragCancel = { totalDrag = 0f },
-                    onDragEnd = {
-                        val threshold = 48.dp.toPx()
-                        when {
-                            totalDrag > threshold -> onPreviousWeek()
-                            totalDrag < -threshold -> onNextWeek()
-                        }
-                        totalDrag = 0f
-                    },
-                ) { change, dragAmount ->
-                    change.consume()
-                    totalDrag += dragAmount
-                }
-            },
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            AnimatedContent(
-                targetState = weekOffset,
-                transitionSpec = {
-                    val forward = targetState > initialState
-                    val enter = slideInHorizontally(
-                        animationSpec = tween(180),
-                        initialOffsetX = { width -> if (forward) width / 4 else -width / 4 },
-                    ) + fadeIn(animationSpec = tween(140))
-                    val exit = slideOutHorizontally(
-                        animationSpec = tween(160),
-                        targetOffsetX = { width -> if (forward) -width / 4 else width / 4 },
-                    ) + fadeOut(animationSpec = tween(110))
-                    enter togetherWith exit
-                },
-                label = "week-range",
-            ) { offset ->
-                Text(
-                    formatWeekRange(weekStartForOffset(offset)),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
+            if (favorites.isEmpty()) {
+                DropdownMenuItem(
+                    text = { Text("Нет избранных расписаний") },
+                    onClick = {},
+                    enabled = false,
                 )
-            }
-            if (weekOffset != 0) {
-                Text(
-                    "Текущая неделя",
-                    modifier = Modifier
-                        .padding(top = 2.dp)
-                        .clickable(onClick = onCurrentWeek),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    textAlign = TextAlign.Center,
-                )
+            } else {
+                favorites.forEach { favorite ->
+                    val current = favorite.id == target.id && favorite.type == target.type
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(
+                                    favorite.name,
+                                    fontWeight = if (current) FontWeight.Bold else FontWeight.Medium,
+                                )
+                                Text(
+                                    favorite.type.displayName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        },
+                        onClick = {
+                            expanded = false
+                            onSelect(favorite)
+                        },
+                        trailingIcon = {
+                            if (current) {
+                                Text(
+                                    "✓",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        },
+                    )
+                }
             }
         }
     }
@@ -367,14 +302,22 @@ private fun WeekNavigation(
 @Composable
 private fun ColumnScope.WeekContent(
     week: ScheduleWeek,
+    weekOffset: Int,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
+    onPreviousWeek: () -> Unit,
+    onNextWeek: () -> Unit,
+    onCurrentWeek: () -> Unit,
 ) {
     key(week.weekStart) {
         WeekPager(
             week = week,
+            weekOffset = weekOffset,
             isRefreshing = isRefreshing,
             onRefresh = onRefresh,
+            onPreviousWeek = onPreviousWeek,
+            onNextWeek = onNextWeek,
+            onCurrentWeek = onCurrentWeek,
         )
     }
 }
@@ -383,8 +326,12 @@ private fun ColumnScope.WeekContent(
 @Composable
 private fun ColumnScope.WeekPager(
     week: ScheduleWeek,
+    weekOffset: Int,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
+    onPreviousWeek: () -> Unit,
+    onNextWeek: () -> Unit,
+    onCurrentWeek: () -> Unit,
 ) {
     val initialPage = remember(week.weekStart) {
         week.days.indexOfFirst { it.date == LocalDate.now().toString() }
@@ -396,10 +343,14 @@ private fun ColumnScope.WeekPager(
     )
     val scope = rememberCoroutineScope()
 
-    DaySelector(
+    WeekSelectorPanel(
         week = week,
+        weekOffset = weekOffset,
         selectedDay = pagerState.currentPage,
-        onSelect = { index ->
+        onPreviousWeek = onPreviousWeek,
+        onNextWeek = onNextWeek,
+        onCurrentWeek = onCurrentWeek,
+        onSelectDay = { index ->
             scope.launch {
                 val delta = abs(index - pagerState.currentPage)
                 if (delta <= 1) {
@@ -431,58 +382,129 @@ private fun ColumnScope.WeekPager(
 }
 
 @Composable
-private fun DaySelector(
+private fun WeekSelectorPanel(
     week: ScheduleWeek,
+    weekOffset: Int,
     selectedDay: Int,
-    onSelect: (Int) -> Unit,
+    onPreviousWeek: () -> Unit,
+    onNextWeek: () -> Unit,
+    onCurrentWeek: () -> Unit,
+    onSelectDay: (Int) -> Unit,
 ) {
-    Row(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
+            .padding(bottom = 8.dp)
+            .pointerInput(weekOffset) {
+                var totalDrag = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = { totalDrag = 0f },
+                    onDragCancel = { totalDrag = 0f },
+                    onDragEnd = {
+                        val threshold = 48.dp.toPx()
+                        when {
+                            totalDrag > threshold -> onPreviousWeek()
+                            totalDrag < -threshold -> onNextWeek()
+                        }
+                        totalDrag = 0f
+                    },
+                ) { change, dragAmount ->
+                    change.consume()
+                    totalDrag += dragAmount
+                }
+            },
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
-        week.days.forEachIndexed { index, day ->
-            val date = LocalDate.parse(day.date)
-            val selected = index == selectedDay
-            val container = if (selected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerLow
-            }
-            val content = if (selected) {
-                MaterialTheme.colorScheme.onPrimaryContainer
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
+        Column(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            AnimatedContent(
+                targetState = weekOffset,
+                transitionSpec = {
+                    val forward = targetState > initialState
+                    val enter = slideInHorizontally(
+                        animationSpec = tween(180),
+                        initialOffsetX = { width -> if (forward) width / 4 else -width / 4 },
+                    ) + fadeIn(animationSpec = tween(140))
+                    val exit = slideOutHorizontally(
+                        animationSpec = tween(160),
+                        targetOffsetX = { width -> if (forward) -width / 4 else width / 4 },
+                    ) + fadeOut(animationSpec = tween(110))
+                    enter togetherWith exit
+                },
+                label = "week-range",
+            ) { offset ->
+                Text(
+                    formatWeekRange(weekStartForOffset(offset)),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                )
             }
 
-            Surface(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { onSelect(index) },
-                shape = RoundedCornerShape(10.dp),
-                color = container,
-                contentColor = content,
+            if (weekOffset != 0) {
+                Text(
+                    "Текущая неделя",
+                    modifier = Modifier
+                        .padding(top = 1.dp, bottom = 4.dp)
+                        .clickable(onClick = onCurrentWeek),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center,
+                )
+            } else {
+                Spacer(Modifier.height(4.dp))
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
             ) {
-                Column(
-                    modifier = Modifier.padding(vertical = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        text = date.dayOfWeek
-                            .getDisplayName(TextStyle.SHORT, Locale("ru"))
-                            .take(2)
-                            .uppercase(Locale("ru")),
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1,
-                        textAlign = TextAlign.Center,
-                    )
-                    Text(
-                        text = date.dayOfMonth.toString(),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                        maxLines = 1,
-                    )
+                week.days.forEachIndexed { index, day ->
+                    val date = LocalDate.parse(day.date)
+                    val selected = index == selectedDay
+                    val container = if (selected) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainer
+                    }
+                    val content = if (selected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { onSelectDay(index) },
+                        shape = RoundedCornerShape(10.dp),
+                        color = container,
+                        contentColor = content,
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(vertical = 6.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(
+                                text = date.dayOfWeek
+                                    .getDisplayName(TextStyle.SHORT, Locale("ru"))
+                                    .take(2)
+                                    .uppercase(Locale("ru")),
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                textAlign = TextAlign.Center,
+                            )
+                            Text(
+                                text = date.dayOfMonth.toString(),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                maxLines = 1,
+                            )
+                        }
+                    }
                 }
             }
         }
