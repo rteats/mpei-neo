@@ -2,6 +2,7 @@ package com.rteats.mpeineo
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -16,7 +17,31 @@ class UiSmokeTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun settingsNavigationWorks() {
+    fun primaryDestinationsRender() {
+        composeRule
+            .onNodeWithText("Поиск")
+            .performClick()
+
+        composeRule
+            .onNodeWithText("Группа, преподаватель или аудитория")
+            .assertIsDisplayed()
+
+        composeRule
+            .onNodeWithText("БАРС")
+            .performClick()
+
+        composeRule
+            .onNodeWithTag("portal-bars")
+            .assertIsDisplayed()
+
+        composeRule
+            .onNodeWithText("Почта")
+            .performClick()
+
+        composeRule
+            .onNodeWithTag("portal-mail")
+            .assertIsDisplayed()
+
         composeRule
             .onNodeWithText("Настройки")
             .performClick()
