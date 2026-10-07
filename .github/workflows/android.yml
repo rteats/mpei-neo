@@ -181,8 +181,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           script: |
-            gradle --no-daemon connectedDebugAndroidTest \
-              -Pandroid.testInstrumentationRunnerArguments.class=com.rteats.mpeineo.UiSmokeTest
+            gradle --no-daemon connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.rteats.mpeineo.UiSmokeTest
 
             # Instrumentation leaves the debug-signed app installed. Remove it before
             # installing the exact release artifact, which may have a different signature.
