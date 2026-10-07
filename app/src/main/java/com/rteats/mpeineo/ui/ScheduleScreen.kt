@@ -48,7 +48,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -67,13 +66,11 @@ import com.rteats.mpeineo.model.ScheduleDay
 import com.rteats.mpeineo.model.ScheduleSource
 import com.rteats.mpeineo.model.ScheduleTarget
 import com.rteats.mpeineo.model.ScheduleWeek
-import java.time.DayOfWeek
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
-import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 import kotlin.math.abs
 import kotlinx.coroutines.launch
@@ -144,6 +141,7 @@ internal fun ScheduleScreen(
             source = state.source,
             onSelect = onSelect,
             onToggleFavorite = { onToggleFavorite(selected) },
+            onOpenSearch = onOpenSearch,
         )
 
         if (state.isLoading && state.week == null) {
@@ -176,6 +174,7 @@ private fun ScheduleTargetSelector(
     source: ScheduleSource?,
     onSelect: (ScheduleTarget) -> Unit,
     onToggleFavorite: () -> Unit,
+    onOpenSearch: () -> Unit,
 ) {
     var expanded by remember(target.id, target.type) { mutableStateOf(false) }
 
@@ -236,11 +235,17 @@ private fun ScheduleTargetSelector(
                         modifier = Modifier.padding(top = 2.dp),
                     )
                 }
+                IconButton(onClick = onOpenSearch) {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = "Поиск расписания",
+                    )
+                }
                 Text(
                     "▾",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 4.dp),
+                    modifier = Modifier.padding(horizontal = 2.dp),
                 )
                 IconButton(onClick = onToggleFavorite) {
                     Icon(
@@ -309,17 +314,15 @@ private fun ColumnScope.WeekContent(
     onNextWeek: () -> Unit,
     onCurrentWeek: () -> Unit,
 ) {
-    key(week.weekStart) {
-        WeekPager(
-            week = week,
-            weekOffset = weekOffset,
-            isRefreshing = isRefreshing,
-            onRefresh = onRefresh,
-            onPreviousWeek = onPreviousWeek,
-            onNextWeek = onNextWeek,
-            onCurrentWeek = onCurrentWeek,
-        )
-    }
+    WeekPager(
+        week = week,
+        weekOffset = weekOffset,
+        isRefreshing = isRefreshing,
+        onRefresh = onRefresh,
+        onPreviousWeek = onPreviousWeek,
+        onNextWeek = onNextWeek,
+        onCurrentWeek = onCurrentWeek,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -416,93 +419,94 @@ private fun WeekSelectorPanel(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            AnimatedContent(
-                targetState = weekOffset,
-                transitionSpec = {
-                    val forward = targetState > initialState
-                    val enter = slideInHorizontally(
-                        animationSpec = tween(180),
-                        initialOffsetX = { width -> if (forward) width / 4 else -width / 4 },
-                    ) + fadeIn(animationSpec = tween(140))
-                    val exit = slideOutHorizontally(
-                        animationSpec = tween(160),
-                        targetOffsetX = { width -> if (forward) -width / 4 else width / 4 },
-                    ) + fadeOut(animationSpec = tween(110))
-                    enter togetherWith exit
-                },
-                label = "week-range",
-            ) { offset ->
+        AnimatedContent(
+            targetState = week,
+            transitionSpec = {
+                val targetStart = LocalDate.parse(targetState.weekStart)
+                val initialStart = LocalDate.parse(initialState.weekStart)
+                val forward = targetStart.isAfter(initialStart)
+                val enter = slideInHorizontally(
+                    animationSpec = tween(220),
+                    initialOffsetX = { width -> if (forward) width else -width },
+                ) + fadeIn(animationSpec = tween(150))
+                val exit = slideOutHorizontally(
+                    animationSpec = tween(220),
+                    targetOffsetX = { width -> if (forward) -width else width },
+                ) + fadeOut(animationSpec = tween(150))
+                enter togetherWith exit
+            },
+            contentKey = { it.weekStart },
+            label = "week-panel-content",
+        ) { displayedWeek ->
+            Column(
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
                 Text(
-                    formatWeekRange(weekStartForOffset(offset)),
+                    text = formatWeekRange(LocalDate.parse(displayedWeek.weekStart)),
+                    modifier = if (weekOffset != 0) {
+                        Modifier.clickable(onClick = onCurrentWeek)
+                    } else {
+                        Modifier
+                    },
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
+                    color = if (weekOffset != 0) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
                     textAlign = TextAlign.Center,
                 )
-            }
 
-            if (weekOffset != 0) {
-                Text(
-                    "Текущая неделя",
-                    modifier = Modifier
-                        .padding(top = 1.dp, bottom = 4.dp)
-                        .clickable(onClick = onCurrentWeek),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    textAlign = TextAlign.Center,
-                )
-            } else {
-                Spacer(Modifier.height(4.dp))
-            }
+                Spacer(Modifier.height(6.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                week.days.forEachIndexed { index, day ->
-                    val date = LocalDate.parse(day.date)
-                    val selected = index == selectedDay
-                    val container = if (selected) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceContainer
-                    }
-                    val content = if (selected) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    displayedWeek.days.forEachIndexed { index, day ->
+                        val date = LocalDate.parse(day.date)
+                        val selected = index == selectedDay
+                        val container = if (selected) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainer
+                        }
+                        val content = if (selected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
 
-                    Surface(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { onSelectDay(index) },
-                        shape = RoundedCornerShape(10.dp),
-                        color = container,
-                        contentColor = content,
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(vertical = 6.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onSelectDay(index) },
+                            shape = RoundedCornerShape(10.dp),
+                            color = container,
+                            contentColor = content,
                         ) {
-                            Text(
-                                text = date.dayOfWeek
-                                    .getDisplayName(TextStyle.SHORT, Locale("ru"))
-                                    .take(2)
-                                    .uppercase(Locale("ru")),
-                                style = MaterialTheme.typography.labelSmall,
-                                maxLines = 1,
-                                textAlign = TextAlign.Center,
-                            )
-                            Text(
-                                text = date.dayOfMonth.toString(),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                maxLines = 1,
-                            )
+                            Column(
+                                modifier = Modifier.padding(vertical = 6.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Text(
+                                    text = date.dayOfWeek
+                                        .getDisplayName(TextStyle.SHORT, Locale("ru"))
+                                        .take(2)
+                                        .uppercase(Locale("ru")),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    textAlign = TextAlign.Center,
+                                )
+                                Text(
+                                    text = date.dayOfMonth.toString(),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    maxLines = 1,
+                                )
+                            }
                         }
                     }
                 }
@@ -581,26 +585,28 @@ private fun LessonCard(lesson: Lesson) {
         ),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "${lesson.startTime}–${lesson.endTime}",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "${lesson.startTime}–${lesson.endTime}",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                if (lesson.kind.isNotBlank()) {
+                    LessonTypeChip(lesson.kind)
+                }
+            }
             Text(
                 lesson.name,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(top = 3.dp),
+                modifier = Modifier.padding(top = 6.dp),
             )
-            if (lesson.kind.isNotBlank()) {
-                Text(
-                    lesson.kind,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 3.dp),
-                )
-            }
             if (lesson.place.isNotBlank()) {
                 Text(
                     lesson.place,
@@ -623,6 +629,23 @@ private fun LessonCard(lesson: Lesson) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun LessonTypeChip(kind: String) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Text(
+            text = kind,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+        )
     }
 }
 
@@ -687,11 +710,6 @@ private fun ErrorCard(
         }
     }
 }
-
-private fun weekStartForOffset(offset: Int): LocalDate =
-    LocalDate.now()
-        .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-        .plusWeeks(offset.toLong())
 
 private fun formatWeekRange(start: LocalDate): String {
     val end = start.plusDays(6)
