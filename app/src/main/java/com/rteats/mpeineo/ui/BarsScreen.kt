@@ -441,7 +441,7 @@ private fun BarsUserHeader(
             onClick = onOpenBrowser,
             modifier = Modifier.padding(start = 8.dp),
         ) {
-            Text("БАРС")
+            Text("Открыть БАРС")
         }
     }
 }
