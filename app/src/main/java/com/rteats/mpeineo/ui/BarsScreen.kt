@@ -72,6 +72,8 @@ internal fun BarsScreen(
     val state by viewModel.state.collectAsState()
     var webView by remember { mutableStateOf<WebView?>(null) }
     var redirectingToMarks by remember { mutableStateOf(false) }
+    var marksExtractionStarted by remember { mutableStateOf(false) }
+    var needsFullViewport by remember { mutableStateOf(true) }
 
     val webIsVisible =
         state.authStage == BarsAuthStage.WEB_AUTH || state.browserVisible
@@ -81,6 +83,7 @@ internal fun BarsScreen(
         if (view?.canGoBack() == true && view.url != BARS_MARKS_URL) {
             view.goBack()
         } else {
+            needsFullViewport = false
             viewModel.hideBrowser()
         }
     }
@@ -115,10 +118,12 @@ internal fun BarsScreen(
         }
 
         AndroidView(
-            modifier = if (webIsVisible) {
-                Modifier.fillMaxSize()
-            } else {
-                Modifier
+            modifier = when {
+                webIsVisible -> Modifier.fillMaxSize()
+                needsFullViewport -> Modifier
+                    .fillMaxSize()
+                    .alpha(0f)
+                else -> Modifier
                     .size(1.dp)
                     .alpha(0f)
             },
@@ -169,11 +174,17 @@ internal fun BarsScreen(
                                         "pageState path=${safeBarsLocation(page.url)} login=${page.isLoginPage} authFlow=${page.isAuthFlow} studentList=${page.isStudentList} marks=${page.isMarksPage}",
                                     )
 
+                                    val currentLocation = safeBarsLocation(page.url)
+                                    val marksLocation = safeBarsLocation(BARS_MARKS_URL)
+
                                     when {
                                         page.isMarksPage -> {
                                             redirectingToMarks = false
-                                            viewModel.authenticatedPage(page.url)
-                                            view.evaluateJavascript(BARS_EXTRACT_SCRIPT, null)
+                                            if (!marksExtractionStarted) {
+                                                marksExtractionStarted = true
+                                                viewModel.authenticatedPage(page.url)
+                                                view.evaluateJavascript(BARS_EXTRACT_SCRIPT, null)
+                                            }
                                         }
 
                                         page.isLoginPage ||
@@ -181,6 +192,19 @@ internal fun BarsScreen(
                                             page.isStudentList -> {
                                             redirectingToMarks = false
                                             viewModel.webAuth(page.url)
+                                        }
+
+                                        page.url.startsWith(BARS_BASE_URL) &&
+                                            currentLocation == marksLocation -> {
+                                            // The BARS marks route renders its table dynamically.
+                                            // Do not reload the same URL just because the table is
+                                            // not in the DOM yet: doing so resets the page before
+                                            // its scripts have a chance to populate the marks.
+                                            redirectingToMarks = false
+                                            viewModel.checking(page.url)
+                                            viewModel.logWebEvent(
+                                                "marks route loaded; waiting for marks DOM",
+                                            )
                                         }
 
                                         page.url.startsWith(BARS_BASE_URL) -> {
@@ -195,6 +219,7 @@ internal fun BarsScreen(
                                         }
 
                                         else -> {
+                                            needsFullViewport = false
                                             viewModel.extractionFailed(
                                                 "БАРС открыл неожиданную страницу",
                                             )
@@ -204,6 +229,7 @@ internal fun BarsScreen(
                             },
                             onData = { json ->
                                 view.post {
+                                    needsFullViewport = false
                                     viewModel.logWebEvent("extraction bridge returned data")
                                     CookieManager.getInstance().flush()
                                     viewModel.extractionReceived(json)
@@ -211,6 +237,7 @@ internal fun BarsScreen(
                             },
                             onError = { message ->
                                 view.post {
+                                    needsFullViewport = false
                                     viewModel.logWebEvent("javascript error=$message")
                                     viewModel.extractionFailed(message)
                                 }
@@ -225,6 +252,8 @@ internal fun BarsScreen(
                             url: String,
                             favicon: Bitmap?,
                         ) {
+                            marksExtractionStarted = false
+                            needsFullViewport = true
                             viewModel.updateSessionUrl(url)
                             viewModel.logWebEvent(
                                 "page started path=${safeBarsLocation(url)}",
@@ -245,6 +274,7 @@ internal fun BarsScreen(
                             error: WebResourceError,
                         ) {
                             if (request.isForMainFrame) {
+                                needsFullViewport = false
                                 viewModel.logWebEvent(
                                     "main-frame error path=${safeBarsLocation(request.url.toString())} code=${error.errorCode}",
                                 )
@@ -291,7 +321,10 @@ internal fun BarsScreen(
 
         if (state.browserVisible) {
             FilledTonalButton(
-                onClick = viewModel::hideBrowser,
+                onClick = {
+                    needsFullViewport = false
+                    viewModel.hideBrowser()
+                },
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(12.dp),
