@@ -24,8 +24,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
+import com.rteats.mpeineo.MpeiNeoApplication
 import com.rteats.mpeineo.R
 
 private enum class AppTab {
@@ -40,6 +42,10 @@ private enum class AppTab {
 fun MpeiNeoApp(viewModel: MainViewModel) {
     var tab by rememberSaveable { mutableStateOf(AppTab.SCHEDULE) }
     val barsViewModel: BarsViewModel = composeViewModel()
+    val application = LocalContext.current.applicationContext as MpeiNeoApplication
+    val updateViewModel: UpdateViewModel = composeViewModel(
+        factory = UpdateViewModel.factory(application.container),
+    )
 
     BackHandler(enabled = tab == AppTab.SEARCH) {
         tab = AppTab.SCHEDULE
@@ -94,6 +100,7 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
         AppContent(
             viewModel = viewModel,
             barsViewModel = barsViewModel,
+            updateViewModel = updateViewModel,
             tab = tab,
             onTabChanged = { tab = it },
             modifier = Modifier
@@ -107,6 +114,7 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
 private fun AppContent(
     viewModel: MainViewModel,
     barsViewModel: BarsViewModel,
+    updateViewModel: UpdateViewModel,
     tab: AppTab,
     onTabChanged: (AppTab) -> Unit,
     modifier: Modifier = Modifier,
@@ -169,6 +177,7 @@ private fun AppContent(
 
             AppTab.SETTINGS -> SettingsScreen(
                 state = state,
+                updateViewModel = updateViewModel,
                 onRefreshOnLaunchChanged = viewModel::setRefreshOnLaunch,
                 onClearCache = viewModel::clearCache,
                 modifier = Modifier.fillMaxSize(),
