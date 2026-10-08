@@ -74,9 +74,20 @@ internal fun BarsScreen(
     var redirectingToMarks by remember { mutableStateOf(false) }
     var marksExtractionStarted by remember { mutableStateOf(false) }
     var needsFullViewport by remember { mutableStateOf(true) }
+    var lastPageStateSignature by remember { mutableStateOf<String?>(null) }
+    var marksMissingPolls by remember { mutableStateOf(0) }
+    var marksRouteRecoveryAttempted by remember { mutableStateOf(false) }
+    var marksWaitLogged by remember { mutableStateOf(false) }
+    var marksFailureReported by remember { mutableStateOf(false) }
 
+    val cacheFresh = state.hasFreshCache()
     val webIsVisible =
         state.authStage == BarsAuthStage.WEB_AUTH || state.browserVisible
+    val shouldHaveWebView =
+        state.authStage != BarsAuthStage.AUTHENTICATED ||
+            state.browserVisible ||
+            state.isLoading ||
+            !cacheFresh
 
     BackHandler(enabled = state.browserVisible) {
         val view = webView
@@ -97,8 +108,10 @@ internal fun BarsScreen(
             BarsAuthStage.CHECKING -> BarsCheckingState(
                 error = state.error,
                 onRetry = {
+                    marksRouteRecoveryAttempted = false
+                    marksFailureReported = false
                     viewModel.checking()
-                    webView?.loadUrl(BARS_MARKS_URL)
+                    webView?.loadUrl(BARS_LOGIN_URL)
                 },
             )
 
@@ -110,15 +123,18 @@ internal fun BarsScreen(
                 state = state,
                 onRefresh = {
                     redirectingToMarks = false
+                    marksRouteRecoveryAttempted = false
+                    marksFailureReported = false
                     viewModel.startRefresh()
-                    webView?.loadUrl(BARS_MARKS_URL)
+                    webView?.loadUrl(BARS_LOGIN_URL)
                 },
                 onOpenBrowser = viewModel::showBrowser,
             )
         }
 
-        AndroidView(
-            modifier = when {
+        if (shouldHaveWebView) {
+            AndroidView(
+                modifier = when {
                 webIsVisible -> Modifier.fillMaxSize()
                 needsFullViewport -> Modifier
                     .fillMaxSize()
@@ -130,6 +146,15 @@ internal fun BarsScreen(
             factory = { context ->
                 WebView(context).also { view ->
                     webView = view
+                    if (
+                        state.authStage == BarsAuthStage.AUTHENTICATED &&
+                        !cacheFresh &&
+                        !state.isLoading &&
+                        !state.browserVisible
+                    ) {
+                        viewModel.startRefresh()
+                    }
+
                     val hasBarsCookies =
                         !CookieManager.getInstance().getCookie(BARS_BASE_URL).isNullOrBlank()
                     viewModel.logWebEvent(
@@ -170,16 +195,24 @@ internal fun BarsScreen(
                                     }
 
                                     viewModel.updateSessionUrl(page.url)
-                                    viewModel.logWebEvent(
-                                        "pageState path=${safeBarsLocation(page.url)} login=${page.isLoginPage} authFlow=${page.isAuthFlow} studentList=${page.isStudentList} marks=${page.isMarksPage}",
-                                    )
 
                                     val currentLocation = safeBarsLocation(page.url)
                                     val marksLocation = safeBarsLocation(BARS_MARKS_URL)
+                                    val signature =
+                                        "$currentLocation|${page.isLoginPage}|${page.isAuthFlow}|${page.isStudentList}|${page.isMarksPage}"
+                                    if (signature != lastPageStateSignature) {
+                                        lastPageStateSignature = signature
+                                        viewModel.logWebEvent(
+                                            "pageState path=$currentLocation login=${page.isLoginPage} authFlow=${page.isAuthFlow} studentList=${page.isStudentList} marks=${page.isMarksPage}",
+                                        )
+                                    }
 
                                     when {
                                         page.isMarksPage -> {
                                             redirectingToMarks = false
+                                            marksMissingPolls = 0
+                                            marksWaitLogged = false
+                                            marksFailureReported = false
                                             if (!marksExtractionStarted) {
                                                 marksExtractionStarted = true
                                                 viewModel.authenticatedPage(page.url)
@@ -191,29 +224,63 @@ internal fun BarsScreen(
                                             page.isAuthFlow ||
                                             page.isStudentList -> {
                                             redirectingToMarks = false
+                                            marksMissingPolls = 0
+                                            marksWaitLogged = false
+                                            marksRouteRecoveryAttempted = false
+                                            marksFailureReported = false
                                             viewModel.webAuth(page.url)
                                         }
 
                                         page.url.startsWith(BARS_BASE_URL) &&
                                             currentLocation == marksLocation -> {
-                                            // The BARS marks route renders its table dynamically.
-                                            // Do not reload the same URL just because the table is
-                                            // not in the DOM yet: doing so resets the page before
-                                            // its scripts have a chance to populate the marks.
                                             redirectingToMarks = false
-                                            viewModel.checking(page.url)
-                                            viewModel.logWebEvent(
-                                                "marks route loaded; waiting for marks DOM",
-                                            )
+                                            viewModel.waitingForMarks(page.url)
+                                            marksMissingPolls += 1
+
+                                            if (!marksWaitLogged) {
+                                                marksWaitLogged = true
+                                                viewModel.logWebEvent(
+                                                    "marks route loaded; waiting for marks DOM",
+                                                )
+                                            }
+
+                                            when {
+                                                marksMissingPolls >= 5 &&
+                                                    !marksRouteRecoveryAttempted -> {
+                                                    marksRouteRecoveryAttempted = true
+                                                    marksMissingPolls = 0
+                                                    marksWaitLogged = false
+                                                    viewModel.logWebEvent(
+                                                        "marks DOM timeout; bootstrapping through BARS root",
+                                                    )
+                                                    view.loadUrl(BARS_LOGIN_URL)
+                                                }
+
+                                                marksMissingPolls >= 10 &&
+                                                    marksRouteRecoveryAttempted &&
+                                                    !marksFailureReported -> {
+                                                    marksFailureReported = true
+                                                    needsFullViewport = false
+                                                    view.evaluateJavascript(
+                                                        BARS_STOP_STATE_OBSERVER_SCRIPT,
+                                                        null,
+                                                    )
+                                                    viewModel.extractionFailed(
+                                                        "БАРС открыл страницу оценок, но таблица не загрузилась.",
+                                                    )
+                                                }
+                                            }
                                         }
 
                                         page.url.startsWith(BARS_BASE_URL) -> {
-                                            // A successful password/2FA flow may land on the
-                                            // BARS main menu. From there move to the student's
-                                            // current marks page once.
+                                            marksMissingPolls = 0
+                                            marksWaitLogged = false
                                             if (!redirectingToMarks) {
                                                 redirectingToMarks = true
-                                                viewModel.checking(page.url)
+                                                viewModel.waitingForMarks(page.url)
+                                                viewModel.logWebEvent(
+                                                    "authenticated BARS root; opening marks route",
+                                                )
                                                 view.loadUrl(BARS_MARKS_URL)
                                             }
                                         }
@@ -230,6 +297,8 @@ internal fun BarsScreen(
                             onData = { json ->
                                 view.post {
                                     needsFullViewport = false
+                                    marksRouteRecoveryAttempted = false
+                                    marksFailureReported = false
                                     viewModel.logWebEvent("extraction bridge returned data")
                                     CookieManager.getInstance().flush()
                                     viewModel.extractionReceived(json)
@@ -253,6 +322,8 @@ internal fun BarsScreen(
                             favicon: Bitmap?,
                         ) {
                             marksExtractionStarted = false
+                            marksMissingPolls = 0
+                            marksWaitLogged = false
                             needsFullViewport = true
                             viewModel.updateSessionUrl(url)
                             viewModel.logWebEvent(
@@ -301,23 +372,24 @@ internal fun BarsScreen(
                     }
 
                     viewModel.logWebEvent(
-                        "initial load path=${safeBarsLocation(BARS_MARKS_URL)}",
+                        "initial load path=${safeBarsLocation(BARS_LOGIN_URL)}",
                     )
-                    view.loadUrl(BARS_MARKS_URL)
+                    view.loadUrl(BARS_LOGIN_URL)
                 }
             },
             update = { view ->
                 webView = view
             },
-            onRelease = { view ->
-                viewModel.logWebEvent("webview released")
-                view.stopLoading()
-                view.removeJavascriptInterface(BARS_JS_INTERFACE)
-                view.webViewClient = WebViewClient()
-                view.destroy()
-                if (webView === view) webView = null
-            },
-        )
+                onRelease = { view ->
+                    viewModel.logWebEvent("webview released")
+                    view.stopLoading()
+                    view.removeJavascriptInterface(BARS_JS_INTERFACE)
+                    view.webViewClient = WebViewClient()
+                    view.destroy()
+                    if (webView === view) webView = null
+                },
+            )
+        }
 
         if (state.browserVisible) {
             FilledTonalButton(
@@ -821,6 +893,9 @@ private fun safeBarsLocation(rawUrl: String): String =
     }.getOrDefault("unparseable")
 
 private const val BARS_JS_INTERFACE = "MpeiNeoBars"
+
+private const val BARS_STOP_STATE_OBSERVER_SCRIPT =
+    "if (window.__mpeiNeoBarsStateTimer) { clearInterval(window.__mpeiNeoBarsStateTimer); window.__mpeiNeoBarsStateTimer = null; }"
 
 private class BarsJavascriptBridge(
     private val onPageState: (String) -> Unit,
