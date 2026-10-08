@@ -720,7 +720,7 @@ private val BARS_EXTRACT_SCRIPT = """
 
         function parseRow(row) {
             const columns = Array.from(row.querySelectorAll("td")).map(function(cell) {
-                return clean(cell.innerText);
+                return clean(cell.textContent);
             });
 
             if (columns.length === 0) return { type: "UNDEFINED" };
@@ -793,7 +793,7 @@ private val BARS_EXTRACT_SCRIPT = """
                         continue;
                     }
 
-                    const header = clean(blocks[i - 1].innerText).split(",");
+                    const header = clean(blocks[i - 1].textContent).split(",");
                     const activities = Array.from(block.querySelectorAll("tr"))
                         .filter(function(row) {
                             return !row.classList.contains("collapse");
@@ -817,7 +817,7 @@ private val BARS_EXTRACT_SCRIPT = """
 
                 if (metadata) {
                     const lines = Array.from(metadata.children || [])
-                        .map(function(node) { return clean(node.innerText); })
+                        .map(function(node) { return clean(node.textContent); })
                         .filter(Boolean);
 
                     if (lines.length > 0) {
@@ -834,7 +834,7 @@ private val BARS_EXTRACT_SCRIPT = """
 
                 const semesterNode =
                     document.querySelector(".filter-option-inner-inner");
-                const semester = semesterNode ? clean(semesterNode.innerText) : "";
+                const semester = semesterNode ? clean(semesterNode.textContent) : "";
 
                 MpeiNeoBars.onData(JSON.stringify({
                     name: name,
