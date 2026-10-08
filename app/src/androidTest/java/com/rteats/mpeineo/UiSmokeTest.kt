@@ -48,7 +48,11 @@ class UiSmokeTest {
             .performClick()
 
         composeRule
-            .onNodeWithText("Обновлять при запуске")
+            .onNodeWithText("Обновлять расписание при запуске")
+            .assertIsDisplayed()
+
+        composeRule
+            .onNodeWithText("Обновления приложения")
             .assertIsDisplayed()
 
         composeRule
