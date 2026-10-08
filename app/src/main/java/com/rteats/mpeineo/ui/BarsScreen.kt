@@ -380,7 +380,6 @@ private fun BarsNativeDashboard(
             } else {
                 items(
                     items = state.disciplines,
-                    key = { it.disciplineName + ":" + it.personName },
                 ) { discipline ->
                     DisciplineCard(
                         discipline = discipline,
@@ -401,9 +400,6 @@ private fun BarsNativeDashboard(
 
                 items(
                     items = state.controlSchedule,
-                    key = {
-                        it.discipline + ":" + it.activity + ":" + it.weekNum
-                    },
                 ) { control ->
                     ControlScheduleCard(
                         item = control,
