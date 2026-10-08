@@ -32,7 +32,7 @@ class UiSmokeTest {
             .performClick()
 
         composeRule
-            .onNodeWithTag("portal-bars")
+            .onNodeWithTag("bars-screen")
             .assertIsDisplayed()
 
         composeRule

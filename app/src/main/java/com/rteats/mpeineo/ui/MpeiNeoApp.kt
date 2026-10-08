@@ -25,6 +25,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
 import com.rteats.mpeineo.R
 
 private enum class AppTab {
@@ -38,6 +39,7 @@ private enum class AppTab {
 @Composable
 fun MpeiNeoApp(viewModel: MainViewModel) {
     var tab by rememberSaveable { mutableStateOf(AppTab.SCHEDULE) }
+    val barsViewModel: BarsViewModel = composeViewModel()
 
     BackHandler(enabled = tab == AppTab.SEARCH) {
         tab = AppTab.SCHEDULE
@@ -91,6 +93,7 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
     ) { innerPadding ->
         AppContent(
             viewModel = viewModel,
+            barsViewModel = barsViewModel,
             tab = tab,
             onTabChanged = { tab = it },
             modifier = Modifier
@@ -103,6 +106,7 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
 @Composable
 private fun AppContent(
     viewModel: MainViewModel,
+    barsViewModel: BarsViewModel,
     tab: AppTab,
     onTabChanged: (AppTab) -> Unit,
     modifier: Modifier = Modifier,
@@ -152,9 +156,8 @@ private fun AppContent(
                 modifier = Modifier.fillMaxSize(),
             )
 
-            AppTab.BARS -> WebPortalScreen(
-                url = "https://bars.mpei.ru",
-                testTag = "portal-bars",
+            AppTab.BARS -> BarsScreen(
+                viewModel = barsViewModel,
                 modifier = Modifier.fillMaxSize(),
             )
 
