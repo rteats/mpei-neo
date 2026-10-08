@@ -637,10 +637,23 @@ private val BARS_PAGE_STATE_SCRIPT = """
             const hasPassword = !!document.querySelector('input[type="password"]');
             const marks = !!document.getElementById("div-Student_SemesterSheet__Mark");
             const studentList = path.indexOf("/student/liststudent") >= 0;
+            const bodyText = ((document.body && document.body.innerText) || "").toLowerCase();
+            const hasOneTimeCodeInput = !!document.querySelector(
+                'input[autocomplete="one-time-code"], ' +
+                'input[name*="code" i], input[id*="code" i]'
+            );
+            const hasTwoFactorUi =
+                hasOneTimeCodeInput ||
+                (
+                    (bodyText.indexOf("двухфактор") >= 0 ||
+                     bodyText.indexOf("код подтверждения") >= 0 ||
+                     bodyText.indexOf("получить код") >= 0 ||
+                     bodyText.indexOf("одноразов") >= 0) &&
+                    !!document.querySelector("form, .modal, [role='dialog']")
+                );
             const authFlow =
                 path.indexOf("/auth") >= 0 ||
-                path === "/bars_web" ||
-                path === "/bars_web/";
+                hasTwoFactorUi;
 
             MpeiNeoBars.onPageState(JSON.stringify({
                 url: window.location.href,
