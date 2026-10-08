@@ -599,17 +599,22 @@ private fun DisciplineCard(
                 style = MaterialTheme.typography.titleMedium,
             )
 
-            val metadata = listOf(
-                discipline.assessmentType.takeIf { it.isNotBlank() },
-                discipline.personName.takeIf { it.isNotBlank() },
-            ).filterNotNull().joinToString(" • ")
+            if (discipline.assessmentType.isNotBlank()) {
+                AssessmentTypeChip(
+                    text = discipline.assessmentType,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
 
-            if (metadata.isNotBlank()) {
+            if (discipline.personName.isNotBlank()) {
                 Text(
-                    text = metadata,
+                    text = discipline.personName,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
+                    modifier = Modifier.padding(
+                        top = if (discipline.assessmentType.isNotBlank()) 4.dp else 6.dp,
+                        bottom = 6.dp,
+                    ),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -670,17 +675,22 @@ private fun DisciplineDetailsSheet(
             fontWeight = FontWeight.Bold,
         )
 
-        val metadata = listOf(
-            discipline.assessmentType.takeIf { it.isNotBlank() },
-            discipline.personName.takeIf { it.isNotBlank() },
-        ).filterNotNull().joinToString(" • ")
+        if (discipline.assessmentType.isNotBlank()) {
+            AssessmentTypeChip(
+                text = discipline.assessmentType,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
 
-        if (metadata.isNotBlank()) {
+        if (discipline.personName.isNotBlank()) {
             Text(
-                text = metadata,
+                text = discipline.personName,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 6.dp, bottom = 18.dp),
+                modifier = Modifier.padding(
+                    top = 6.dp,
+                    bottom = 18.dp,
+                ),
             )
         } else {
             Spacer(Modifier.size(16.dp))
@@ -798,6 +808,26 @@ private fun FinalGradeRow(
                 mark = mark,
             )
         }
+    }
+}
+
+@Composable
+private fun AssessmentTypeChip(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 
@@ -1050,7 +1080,35 @@ private val BARS_EXTRACT_SCRIPT = """
                         continue;
                     }
 
-                    const header = clean(blocks[i - 1].textContent).split(",");
+                    const headerParts = clean(blocks[i - 1].textContent)
+                        .split(",")
+                        .map(clean)
+                        .filter(Boolean);
+
+                    const assessmentIndex = headerParts.findLastIndex(function(part) {
+                        return /(экзамен|зач[её]т|аттестаци|дифференц)/i.test(part);
+                    });
+
+                    let disciplineName = "";
+                    let personName = "";
+                    let assessmentType = "";
+
+                    if (assessmentIndex > 0) {
+                        personName = headerParts[assessmentIndex - 1] || "";
+                        assessmentType = headerParts[assessmentIndex] || "";
+                        disciplineName = headerParts
+                            .slice(0, Math.max(assessmentIndex - 1, 1))
+                            .join(", ");
+                    } else if (headerParts.length >= 4) {
+                        disciplineName = headerParts.slice(0, -3).join(", ");
+                        personName = headerParts[headerParts.length - 3] || "";
+                        assessmentType = headerParts[headerParts.length - 2] || "";
+                    } else {
+                        disciplineName = headerParts[0] || "";
+                        personName = headerParts[1] || "";
+                        assessmentType = headerParts[2] || "";
+                    }
+
                     const activities = Array.from(block.querySelectorAll("tr"))
                         .filter(function(row) {
                             return !row.classList.contains("collapse");
@@ -1058,9 +1116,9 @@ private val BARS_EXTRACT_SCRIPT = """
                         .map(parseRow);
 
                     disciplines.push({
-                        disciplineName: clean(header[0]),
-                        personName: clean(header[1]),
-                        assessmentType: clean(header[2]),
+                        disciplineName: clean(disciplineName),
+                        personName: clean(personName),
+                        assessmentType: clean(assessmentType),
                         activities: activities
                     });
                 }
