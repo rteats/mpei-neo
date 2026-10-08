@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
@@ -55,6 +56,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
@@ -180,11 +183,16 @@ private fun ScheduleTargetSelector(
     onOpenSearch: () -> Unit,
 ) {
     var expanded by remember(target.id, target.type) { mutableStateOf(false) }
+    val density = LocalDensity.current
+    var menuWidth by remember { mutableStateOf(0.dp) }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 8.dp),
+            .padding(top = 8.dp, bottom = 8.dp)
+            .onSizeChanged { size ->
+                menuWidth = with(density) { size.width.toDp() }
+            },
     ) {
         Card(
             modifier = Modifier
@@ -262,7 +270,7 @@ private fun ScheduleTargetSelector(
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.width(menuWidth),
         ) {
             if (favorites.isEmpty()) {
                 DropdownMenuItem(
@@ -378,6 +386,7 @@ private fun ColumnScope.WeekPager(
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
+            pageSpacing = 16.dp,
         ) { page ->
             DayPage(
                 day = week.days[page],
