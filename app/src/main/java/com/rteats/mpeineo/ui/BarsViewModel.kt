@@ -28,8 +28,13 @@ internal data class BarsUiState(
     val isLoading: Boolean = true,
     val browserVisible: Boolean = false,
     val sessionUrl: String = BARS_MARKS_URL,
+    val lastUpdatedAtMillis: Long = 0L,
     val error: String? = null,
 ) {
+    fun hasFreshCache(nowMillis: Long = System.currentTimeMillis()): Boolean =
+        lastUpdatedAtMillis > 0L &&
+            nowMillis - lastUpdatedAtMillis in 0 until BARS_CACHE_TTL_MS
+
     val controlSchedule: List<BarsControlScheduleItem>
         get() = disciplines
             .flatMap { discipline ->
@@ -238,6 +243,7 @@ internal class BarsViewModel(
                         semester = payload.semester,
                         disciplines = payload.disciplines,
                         isLoading = false,
+                        lastUpdatedAtMillis = System.currentTimeMillis(),
                         error = null,
                     )
                 }
@@ -260,6 +266,21 @@ internal class BarsViewModel(
     fun startRefresh() {
         diagnostics.log("BARS", "refresh requested")
         _state.update { it.copy(isLoading = true, error = null) }
+    }
+
+    fun waitingForMarks(url: String) {
+        val current = _state.value
+        if (current.lastUpdatedAtMillis > 0L) {
+            _state.update {
+                it.copy(
+                    isLoading = true,
+                    sessionUrl = url,
+                    error = null,
+                )
+            }
+        } else {
+            checking(url)
+        }
     }
 
     fun logWebEvent(message: String) {
@@ -297,3 +318,5 @@ private fun String.extractFirstIntOrNull(): Int? =
     split(Regex("[^0-9]+"))
         .firstOrNull { it.isNotBlank() }
         ?.toIntOrNull()
+
+private const val BARS_CACHE_TTL_MS = 5L * 60L * 1_000L
