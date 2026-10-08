@@ -42,3 +42,12 @@ Instead of “the top thing is too large”, use wording like:
 - “Increase padding around the **Launcher foreground glyph**.”
 
 That wording maps directly to one Compose component or resource.
+
+
+## Diagnostics terminology
+
+| What you see | Component name to use in feedback | Implementation | Notes |
+| --- | --- | --- | --- |
+| Runtime log card in Settings | **Diagnostics card** | SettingsScreen / DiagnosticLog | Persistent rolling log that survives app restarts and updates. |
+| Copy button | **Copy diagnostics** | Clipboard action in SettingsScreen | Copies the current runtime log as plain text. |
+| Clear button | **Clear diagnostics** | DiagnosticLog.clear | Clears the persistent runtime log. |
