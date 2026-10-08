@@ -1,7 +1,9 @@
 package com.rteats.mpeineo.ui
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import com.google.gson.Gson
+import com.rteats.mpeineo.data.DiagnosticLog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -151,12 +153,15 @@ internal object BarsPayloadParser {
         gson.fromJson(json, BarsPageState::class.java)
 }
 
-internal class BarsViewModel : ViewModel() {
+internal class BarsViewModel(
+    private val diagnostics: DiagnosticLog,
+) : ViewModel() {
 
     private val _state = MutableStateFlow(BarsUiState())
     val state: StateFlow<BarsUiState> = _state.asStateFlow()
 
     fun checking(url: String? = null) {
+        diagnostics.log("BARS", "state=CHECKING")
         _state.update {
             it.copy(
                 authStage = BarsAuthStage.CHECKING,
@@ -168,6 +173,7 @@ internal class BarsViewModel : ViewModel() {
     }
 
     fun webAuth(url: String) {
+        diagnostics.log("BARS", "state=WEB_AUTH")
         _state.update {
             it.copy(
                 authStage = BarsAuthStage.WEB_AUTH,
@@ -180,6 +186,7 @@ internal class BarsViewModel : ViewModel() {
     }
 
     fun authenticatedPage(url: String) {
+        diagnostics.log("BARS", "state=AUTHENTICATED extracting=true")
         _state.update {
             it.copy(
                 authStage = BarsAuthStage.AUTHENTICATED,
@@ -198,6 +205,10 @@ internal class BarsViewModel : ViewModel() {
     fun extractionReceived(json: String) {
         runCatching { BarsPayloadParser.parseExtraction(json) }
             .onSuccess { payload ->
+                diagnostics.log(
+                    "BARS",
+                    "extraction success disciplines=${payload.disciplines.size}",
+                )
                 _state.update {
                     it.copy(
                         authStage = BarsAuthStage.AUTHENTICATED,
@@ -216,6 +227,7 @@ internal class BarsViewModel : ViewModel() {
     }
 
     fun extractionFailed(message: String) {
+        diagnostics.log("BARS", "error=$message")
         _state.update {
             it.copy(
                 isLoading = false,
@@ -225,7 +237,12 @@ internal class BarsViewModel : ViewModel() {
     }
 
     fun startRefresh() {
+        diagnostics.log("BARS", "refresh requested")
         _state.update { it.copy(isLoading = true, error = null) }
+    }
+
+    fun logWebEvent(message: String) {
+        diagnostics.log("BARS_WEB", message)
     }
 
     fun showBrowser() {
@@ -234,6 +251,15 @@ internal class BarsViewModel : ViewModel() {
 
     fun hideBrowser() {
         _state.update { it.copy(browserVisible = false) }
+    }
+
+    companion object {
+        fun factory(diagnostics: DiagnosticLog): ViewModelProvider.Factory =
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                    BarsViewModel(diagnostics) as T
+            }
     }
 }
 
