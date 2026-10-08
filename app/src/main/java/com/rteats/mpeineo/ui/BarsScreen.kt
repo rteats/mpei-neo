@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -84,7 +85,13 @@ internal fun BarsScreen(
             .testTag("bars-screen"),
     ) {
         when (state.authStage) {
-            BarsAuthStage.CHECKING -> BarsCheckingState()
+            BarsAuthStage.CHECKING -> BarsCheckingState(
+                error = state.error,
+                onRetry = {
+                    viewModel.checking()
+                    webView?.loadUrl(BARS_MARKS_URL)
+                },
+            )
 
             BarsAuthStage.WEB_AUTH -> {
                 // The official BARS page is rendered by the persistent WebView below.
@@ -210,6 +217,18 @@ internal fun BarsScreen(
                             view.evaluateJavascript(BARS_PAGE_STATE_SCRIPT, null)
                         }
 
+                        override fun onReceivedError(
+                            view: WebView,
+                            request: WebResourceRequest,
+                            error: WebResourceError,
+                        ) {
+                            if (request.isForMainFrame) {
+                                viewModel.extractionFailed(
+                                    "Не удалось открыть БАРС: ${error.description}",
+                                )
+                            }
+                        }
+
                         override fun shouldOverrideUrlLoading(
                             view: WebView,
                             request: WebResourceRequest,
@@ -255,21 +274,36 @@ internal fun BarsScreen(
 }
 
 @Composable
-private fun BarsCheckingState() {
+private fun BarsCheckingState(
+    error: String?,
+    onRetry: () -> Unit,
+) {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
     ) {
         Column(
+            modifier = Modifier.padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            CircularProgressIndicator()
-            Text(
-                "Проверяем сессию БАРС…",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (error == null) {
+                CircularProgressIndicator()
+                Text(
+                    "Проверяем сессию БАРС…",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text(
+                    text = error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Button(onClick = onRetry) {
+                    Text("Повторить")
+                }
+            }
         }
     }
 }
