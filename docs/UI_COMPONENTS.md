@@ -21,13 +21,14 @@ This file names the visible UI pieces using the same terminology as the Compose 
 | Small pill such as “Лекция” | **Lesson type chip** | `LessonTypeChip` | Shown in the top-right corner of a lesson card. |
 | Pull-down refresh interaction over lessons | **Pull-to-refresh container** | `PullToRefreshBox` | Refreshes the current schedule. |
 | Screen used to find a group / teacher / room | **Search screen** | `SearchScreen` | Opened from the schedule search button; Android Back returns to Schedule. |
-| Native marks/profile page in the BARS tab | **BARS dashboard** | `BarsScreen` / `BarsNativeDashboard` | Shows the current profile, grades and control-activity schedule. |
+| Native marks/profile page in the BARS tab | **BARS dashboard** | `BarsScreen` / `BarsNativeDashboard` | MpeiX-style profile header followed by one card per discipline. |
 | Official BARS page shown while signing in | **BARS authentication WebView** | persistent `WebView` inside `BarsScreen` | Handles the official password and 2FA flow without storing the password in the app. |
 | “Открыть БАРС” browser overlay | **BARS session WebView** | the same persistent `WebView` inside `BarsScreen` | Opens the already authenticated BARS session. |
-| One discipline on the BARS dashboard | **BARS discipline card** | `DisciplineCard` | Shows current/final marks for a discipline. |
-| One planned control activity | **BARS control schedule card** | `ControlScheduleCard` | Shows the KM name, academic week, weight and mark/date when present. |
+| One discipline on the BARS dashboard | **BARS discipline card** | `DisciplineCard` | MpeiX-style card with subject, assessment type, teacher and compact mark chips. |
+| Sheet opened by tapping a BARS discipline | **BARS discipline details** | `DisciplineDetailsSheet` | Shows the subject's control activities/test schedule, week, weight and final grades. |
 | Mail embedded browser page | **Mail portal** | `WebPortalScreen` with tag `portal-mail` | Loads `https://mail.mpei.ru/owa`. |
-| Settings page | **Settings screen** | `SettingsScreen` | App preferences and cache controls. |
+| Settings page | **Settings screen** | `SettingsScreen` | App preferences, updater and cache controls. |
+| GitHub Releases updater | **Update card** | `UpdateCard` | Checks releases, downloads the signed APK, verifies GitHub's SHA-256 digest when present and opens Android's installer. |
 | Launcher icon foreground | **Launcher foreground glyph** | `ic_launcher_foreground.xml` | Shared by regular red/white adaptive icon and Material You monochrome icon. |
 
 ## Example feedback
