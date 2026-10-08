@@ -28,8 +28,10 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -47,6 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlin.math.roundToInt
 
 /**
  * Native BARS frontend backed by the official BARS web session.
@@ -315,6 +318,16 @@ private fun BarsNativeDashboard(
     onRefresh: () -> Unit,
     onOpenBrowser: () -> Unit,
 ) {
+    var selectedDiscipline by remember { mutableStateOf<BarsDiscipline?>(null) }
+
+    selectedDiscipline?.let { discipline ->
+        ModalBottomSheet(
+            onDismissRequest = { selectedDiscipline = null },
+        ) {
+            DisciplineDetailsSheet(discipline)
+        }
+    }
+
     PullToRefreshBox(
         isRefreshing = state.isLoading,
         onRefresh = onRefresh,
@@ -322,16 +335,11 @@ private fun BarsNativeDashboard(
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item {
-                BarsProfileCard(
+                BarsUserHeader(
                     state = state,
-                    onRefresh = onRefresh,
                     onOpenBrowser = onOpenBrowser,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, top = 12.dp),
                 )
             }
 
@@ -340,7 +348,7 @@ private fun BarsNativeDashboard(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer,
                         ),
@@ -359,137 +367,81 @@ private fun BarsNativeDashboard(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
                     )
                 }
-            }
-
-            item {
-                SectionTitle(
-                    title = "Текущие оценки",
-                    subtitle = state.semester.takeIf { it.isNotBlank() },
-                )
             }
 
             if (state.disciplines.isEmpty() && !state.isLoading) {
                 item {
                     EmptyBarsCard(
-                        text = "В текущем семестре оценки не найдены.",
+                        text = "В текущем семестре дисциплины не найдены.",
                     )
                 }
             } else {
-                items(
-                    items = state.disciplines,
-                ) { discipline ->
+                items(state.disciplines) { discipline ->
                     DisciplineCard(
                         discipline = discipline,
+                        onClick = { selectedDiscipline = discipline },
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                    )
-                }
-            }
-
-            if (state.controlSchedule.isNotEmpty()) {
-                item {
-                    SectionTitle(
-                        title = "Контрольные мероприятия",
-                        subtitle = "План КМ по учебным неделям",
-                    )
-                }
-
-                items(
-                    items = state.controlSchedule,
-                ) { control ->
-                    ControlScheduleCard(
-                        item = control,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
+                            .padding(horizontal = 8.dp)
+                            .padding(bottom = 8.dp),
                     )
                 }
             }
 
             item {
-                Spacer(Modifier.size(10.dp))
+                Spacer(Modifier.size(8.dp))
             }
         }
     }
 }
 
 @Composable
-private fun BarsProfileCard(
+private fun BarsUserHeader(
     state: BarsUiState,
-    onRefresh: () -> Unit,
     onOpenBrowser: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        ),
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, top = 16.dp, end = 8.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.Top,
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
                 text = state.profileName.ifBlank { "БАРС МЭИ" },
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
+
             if (state.profileGroup.isNotBlank()) {
                 Text(
                     text = state.profileGroup,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Button(
-                    onClick = onOpenBrowser,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("Открыть БАРС")
-                }
-                FilledTonalButton(
-                    onClick = onRefresh,
-                ) {
-                    Text("Обновить")
-                }
+            if (state.semester.isNotBlank()) {
+                Text(
+                    text = state.semester,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
-    }
-}
 
-@Composable
-private fun SectionTitle(
-    title: String,
-    subtitle: String?,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 2.dp),
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-        )
-        if (!subtitle.isNullOrBlank()) {
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        FilledTonalButton(
+            onClick = onOpenBrowser,
+            modifier = Modifier.padding(start = 8.dp),
+        ) {
+            Text("Открыть БАРС")
         }
     }
 }
@@ -497,141 +449,280 @@ private fun SectionTitle(
 @Composable
 private fun DisciplineCard(
     discipline: BarsDiscipline,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(
-        modifier = modifier,
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
         ),
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
+            modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
-                Text(
-                    text = discipline.disciplineName,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
+            Text(
+                text = discipline.disciplineName,
+                style = MaterialTheme.typography.titleMedium,
+            )
 
-                val headlineMark = discipline.finalMark ?: discipline.currentScore
-                if (!headlineMark.isNullOrBlank()) {
-                    ScoreChip(headlineMark)
+            val metadata = listOf(
+                discipline.assessmentType.takeIf { it.isNotBlank() },
+                discipline.personName.takeIf { it.isNotBlank() },
+            ).filterNotNull().joinToString(" • ")
+
+            if (metadata.isNotBlank()) {
+                Text(
+                    text = metadata,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            val finalMark = discipline.finalMarkValue
+            when {
+                finalMark != null -> {
+                    GradeChip(
+                        text = "Итог: ${finalMark.roundToInt()}",
+                        mark = finalMark,
+                    )
                 }
-            }
 
-            if (discipline.assessmentType.isNotBlank()) {
-                Text(
-                    text = discipline.assessmentType,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
+                discipline.markValues.isNotEmpty() -> {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        discipline.markValues.take(8).forEach { mark ->
+                            GradeChip(
+                                text = mark.roundToInt().toString(),
+                                mark = mark,
+                            )
+                        }
+                        if (discipline.markValues.size > 8) {
+                            NeutralChip("+${discipline.markValues.size - 8}")
+                        }
+                    }
+                }
 
-            if (discipline.personName.isNotBlank()) {
-                Text(
-                    text = discipline.personName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-
-            if (discipline.currentMarks.isNotEmpty()) {
-                Text(
-                    text = discipline.currentMarks.joinToString("  •  "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            } else if (discipline.finalMark == null && discipline.currentScore == null) {
-                Text(
-                    text = "Оценок пока нет",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                else -> NeutralChip("Нет оценок")
             }
         }
     }
 }
 
 @Composable
-private fun ScoreChip(mark: String) {
-    Surface(
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+private fun DisciplineDetailsSheet(
+    discipline: BarsDiscipline,
+) {
+    val controls = discipline.activities.filter {
+        it.type == BarsActivityType.CONTROL_ACTIVITY
+    }
+    val finalGrades = discipline.activities.filter {
+        it.type != BarsActivityType.CONTROL_ACTIVITY &&
+            it.type != BarsActivityType.UNDEFINED &&
+            it.markValue != null
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
     ) {
         Text(
-            text = mark,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-            style = MaterialTheme.typography.labelLarge,
+            text = discipline.disciplineName,
+            style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
+        )
+
+        val metadata = listOf(
+            discipline.assessmentType.takeIf { it.isNotBlank() },
+            discipline.personName.takeIf { it.isNotBlank() },
+        ).filterNotNull().joinToString(" • ")
+
+        if (metadata.isNotBlank()) {
+            Text(
+                text = metadata,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp, bottom = 18.dp),
+            )
+        } else {
+            Spacer(Modifier.size(16.dp))
+        }
+
+        if (controls.isNotEmpty()) {
+            Text(
+                text = "Контрольные мероприятия",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(bottom = 6.dp),
+            )
+
+            controls.forEachIndexed { index, activity ->
+                ActivityDetailRow(activity)
+                if (index != controls.lastIndex) {
+                    HorizontalDivider()
+                }
+            }
+        } else {
+            Text(
+                text = "Контрольных мероприятий нет",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        if (finalGrades.isNotEmpty()) {
+            Text(
+                text = "Итоговые оценки",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = 20.dp, bottom = 6.dp),
+            )
+
+            finalGrades.forEachIndexed { index, activity ->
+                FinalGradeRow(activity)
+                if (index != finalGrades.lastIndex) {
+                    HorizontalDivider()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActivityDetailRow(
+    activity: BarsActivity,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                text = activity.name?.takeIf { it.isNotBlank() }
+                    ?: "Контрольное мероприятие",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+            )
+
+            val details = buildList {
+                activity.weight?.takeIf { it.isNotBlank() }?.let {
+                    add("Вес: $it")
+                }
+                activity.weekNum?.takeIf { it.isNotBlank() }?.let {
+                    add("Неделя: $it")
+                }
+            }
+
+            if (details.isNotEmpty()) {
+                Text(
+                    text = details.joinToString(" • "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        activity.markValue?.let { mark ->
+            GradeChip(
+                text = mark.roundToInt().toString(),
+                mark = mark,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FinalGradeRow(
+    activity: BarsActivity,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = activity.name?.takeIf { it.isNotBlank() }
+                ?: activity.type.displayName(),
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        activity.markValue?.let { mark ->
+            GradeChip(
+                text = mark.roundToInt().toString(),
+                mark = mark,
+            )
+        }
+    }
+}
+
+@Composable
+private fun GradeChip(
+    text: String,
+    mark: Float,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val (container, content) = when (mark) {
+        in 3.5f..5f -> scheme.primaryContainer to scheme.onPrimaryContainer
+        in 2.5f..<3.5f -> scheme.tertiaryContainer to scheme.onTertiaryContainer
+        in 0f..<2.5f -> scheme.errorContainer to scheme.onErrorContainer
+        else -> scheme.surfaceVariant to scheme.onSurfaceVariant
+    }
+
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = container,
+        contentColor = content,
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
         )
     }
 }
 
 @Composable
-private fun ControlScheduleCard(
-    item: BarsControlScheduleItem,
-    modifier: Modifier = Modifier,
+private fun NeutralChip(
+    text: String,
 ) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        ),
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = item.activity.ifBlank { "Контрольное мероприятие" },
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = "${item.weekNum} нед.",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-            Text(
-                text = item.discipline,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            val details = buildList {
-                if (item.weight.isNotBlank()) add("вес ${item.weight}")
-                if (item.markAndDate.isNotBlank()) add(item.markAndDate)
-            }
-            if (details.isNotEmpty()) {
-                Text(
-                    text = details.joinToString(" • "),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+            style = MaterialTheme.typography.labelMedium,
+        )
     }
 }
+
+private fun BarsActivityType.displayName(): String =
+    when (this) {
+        BarsActivityType.CURRENT_SCORE -> "Балл текущего контроля"
+        BarsActivityType.CONTROL_WEEK -> "Контрольная неделя"
+        BarsActivityType.INTERMEDIATE_MARK -> "Промежуточная оценка"
+        BarsActivityType.FINAL_MARK -> "Итоговая оценка"
+        BarsActivityType.CONTROL_ACTIVITY -> "Контрольное мероприятие"
+        BarsActivityType.UNDEFINED -> "Оценка"
+    }
 
 @Composable
 private fun EmptyBarsCard(text: String) {

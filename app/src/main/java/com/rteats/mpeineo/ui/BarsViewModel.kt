@@ -66,10 +66,11 @@ internal data class BarsDiscipline(
                     !it.markAndDate.isNullOrBlank()
             }
             .mapNotNull { activity ->
-                val mark = activity.markAndDate?.extractFirstNumber() ?: return@mapNotNull null
-                val label = activity.name?.takeIf { it.isNotBlank() } ?: "КМ"
-                "$label: $mark"
+                activity.markAndDate?.extractFirstNumber()
             }
+
+    val markValues: List<Float>
+        get() = currentMarks.mapNotNull { it.toFloatOrNull() }
 
     val finalMark: String?
         get() = activities
@@ -80,6 +81,9 @@ internal data class BarsDiscipline(
             ?.markAndDate
             ?.extractFirstNumber()
 
+    val finalMarkValue: Float?
+        get() = finalMark?.toFloatOrNull()
+
     val currentScore: String?
         get() = activities
             .lastOrNull {
@@ -88,6 +92,9 @@ internal data class BarsDiscipline(
             }
             ?.markAndDate
             ?.extractFirstNumber()
+
+    val currentScoreValue: Float?
+        get() = currentScore?.toFloatOrNull()
 }
 
 internal data class BarsActivity(
@@ -96,7 +103,10 @@ internal data class BarsActivity(
     val weight: String? = null,
     val weekNum: String? = null,
     val markAndDate: String? = null,
-)
+) {
+    val markValue: Float?
+        get() = markAndDate?.extractFirstNumber()?.toFloatOrNull()
+}
 
 internal enum class BarsActivityType {
     UNDEFINED,
