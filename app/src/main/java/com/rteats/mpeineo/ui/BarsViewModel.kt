@@ -163,18 +163,37 @@ internal class BarsViewModel(
     private var lastWebEvent: String? = null
 
     fun checking(url: String? = null) {
+        val current = _state.value
+        val targetUrl = url ?: current.sessionUrl
+        if (
+            current.authStage == BarsAuthStage.CHECKING &&
+            current.sessionUrl == targetUrl &&
+            current.error == null
+        ) {
+            return
+        }
+
         diagnostics.log("BARS", "state=CHECKING")
         _state.update {
             it.copy(
                 authStage = BarsAuthStage.CHECKING,
                 isLoading = true,
-                sessionUrl = url ?: it.sessionUrl,
+                sessionUrl = targetUrl,
                 error = null,
             )
         }
     }
 
     fun webAuth(url: String) {
+        val current = _state.value
+        if (
+            current.authStage == BarsAuthStage.WEB_AUTH &&
+            current.sessionUrl == url &&
+            current.error == null
+        ) {
+            return
+        }
+
         diagnostics.log("BARS", "state=WEB_AUTH")
         _state.update {
             it.copy(
