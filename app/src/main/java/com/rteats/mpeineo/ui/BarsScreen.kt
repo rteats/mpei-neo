@@ -3,6 +3,7 @@ package com.rteats.mpeineo.ui
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceError
@@ -11,6 +12,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -122,6 +125,11 @@ internal fun BarsScreen(
             factory = { context ->
                 WebView(context).also { view ->
                     webView = view
+                    val hasBarsCookies =
+                        !CookieManager.getInstance().getCookie(BARS_BASE_URL).isNullOrBlank()
+                    viewModel.logWebEvent(
+                        "webview created cookiesPresent=$hasBarsCookies",
+                    )
 
                     view.settings.apply {
                         javaScriptEnabled = true
@@ -157,6 +165,9 @@ internal fun BarsScreen(
                                     }
 
                                     viewModel.updateSessionUrl(page.url)
+                                    viewModel.logWebEvent(
+                                        "pageState path=${safeBarsLocation(page.url)} login=${page.isLoginPage} authFlow=${page.isAuthFlow} studentList=${page.isStudentList} marks=${page.isMarksPage}",
+                                    )
 
                                     when {
                                         page.isMarksPage -> {
@@ -193,12 +204,14 @@ internal fun BarsScreen(
                             },
                             onData = { json ->
                                 view.post {
+                                    viewModel.logWebEvent("extraction bridge returned data")
                                     CookieManager.getInstance().flush()
                                     viewModel.extractionReceived(json)
                                 }
                             },
                             onError = { message ->
                                 view.post {
+                                    viewModel.logWebEvent("javascript error=$message")
                                     viewModel.extractionFailed(message)
                                 }
                             },
@@ -213,10 +226,16 @@ internal fun BarsScreen(
                             favicon: Bitmap?,
                         ) {
                             viewModel.updateSessionUrl(url)
+                            viewModel.logWebEvent(
+                                "page started path=${safeBarsLocation(url)}",
+                            )
                         }
 
                         override fun onPageFinished(view: WebView, url: String) {
                             viewModel.updateSessionUrl(url)
+                            viewModel.logWebEvent(
+                                "page finished path=${safeBarsLocation(url)}",
+                            )
                             view.evaluateJavascript(BARS_PAGE_STATE_SCRIPT, null)
                         }
 
@@ -226,6 +245,9 @@ internal fun BarsScreen(
                             error: WebResourceError,
                         ) {
                             if (request.isForMainFrame) {
+                                viewModel.logWebEvent(
+                                    "main-frame error path=${safeBarsLocation(request.url.toString())} code=${error.errorCode}",
+                                )
                                 viewModel.extractionFailed(
                                     "Не удалось открыть БАРС: ${error.description}",
                                 )
@@ -248,6 +270,9 @@ internal fun BarsScreen(
                         }
                     }
 
+                    viewModel.logWebEvent(
+                        "initial load path=${safeBarsLocation(BARS_MARKS_URL)}",
+                    )
                     view.loadUrl(BARS_MARKS_URL)
                 }
             },
@@ -255,6 +280,7 @@ internal fun BarsScreen(
                 webView = view
             },
             onRelease = { view ->
+                viewModel.logWebEvent("webview released")
                 view.stopLoading()
                 view.removeJavascriptInterface(BARS_JS_INTERFACE)
                 view.webViewClient = WebViewClient()
@@ -676,10 +702,26 @@ private fun GradeChip(
     mark: Float,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val (container, content) = when (mark) {
-        in 3.5f..5f -> scheme.primaryContainer to scheme.onPrimaryContainer
-        in 2.5f..<3.5f -> scheme.tertiaryContainer to scheme.onTertiaryContainer
-        in 0f..<2.5f -> scheme.errorContainer to scheme.onErrorContainer
+    val dark = isSystemInDarkTheme()
+    val (container, content) = when (mark.roundToInt()) {
+        4, 5 -> if (dark) {
+            Color(0xFF1B5E20) to Color(0xFFC8E6C9)
+        } else {
+            Color(0xFFC8E6C9) to Color(0xFF145A20)
+        }
+
+        3 -> if (dark) {
+            Color(0xFF6B5500) to Color(0xFFFFE082)
+        } else {
+            Color(0xFFFFE082) to Color(0xFF5A4600)
+        }
+
+        0, 1, 2 -> if (dark) {
+            Color(0xFF7F1D1D) to Color(0xFFFFDAD6)
+        } else {
+            Color(0xFFFFCDD2) to Color(0xFF7A1420)
+        }
+
         else -> scheme.surfaceVariant to scheme.onSurfaceVariant
     }
 
@@ -738,6 +780,12 @@ private fun EmptyBarsCard(text: String) {
         )
     }
 }
+
+private fun safeBarsLocation(rawUrl: String): String =
+    runCatching {
+        val uri = Uri.parse(rawUrl)
+        "${uri.host.orEmpty()}${uri.path.orEmpty()}"
+    }.getOrDefault("unparseable")
 
 private const val BARS_JS_INTERFACE = "MpeiNeoBars"
 
