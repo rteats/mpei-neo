@@ -1,5 +1,8 @@
 package com.rteats.mpeineo.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -41,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.rteats.mpeineo.BuildConfig
+import com.rteats.mpeineo.MpeiNeoApplication
 
 @Composable
 internal fun SettingsScreen(
@@ -51,8 +55,11 @@ internal fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     var cacheCleared by remember { mutableStateOf(false) }
+    var logCopied by remember { mutableStateOf(false) }
     val updateState by updateViewModel.state.collectAsState()
     val context = LocalContext.current
+    val application = context.applicationContext as MpeiNeoApplication
+    val diagnostics = application.container.diagnostics
 
     val installPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult(),
@@ -123,6 +130,53 @@ internal fun SettingsScreen(
         )
 
         Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    "Диагностика",
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "Журнал сохраняется между перезапусками и обновлениями. В него не записываются пароли, 2FA-коды, cookie или токены БАРС.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            val text = diagnostics.readText().ifBlank {
+                                "Журнал диагностики пока пуст."
+                            }
+                            val clipboard = context.getSystemService(
+                                Context.CLIPBOARD_SERVICE,
+                            ) as ClipboardManager
+                            clipboard.setPrimaryClip(
+                                ClipData.newPlainText("MPEI Neo diagnostics", text),
+                            )
+                            logCopied = true
+                            diagnostics.log("DIAGNOSTICS", "log copied to clipboard")
+                        },
+                    ) {
+                        Text(if (logCopied) "Скопировано" else "Копировать журнал")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            diagnostics.clear()
+                            diagnostics.log("DIAGNOSTICS", "log cleared by user")
+                            logCopied = false
+                        },
+                    ) {
+                        Text("Очистить")
+                    }
+                }
+            }
+        }
+
+        Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -171,7 +225,7 @@ internal fun SettingsScreen(
         HorizontalDivider()
 
         Text(
-            "MPEI Neo ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+            "${if (BuildConfig.UPDATE_CHANNEL == "dev") "MPEI Neo Dev" else "MPEI Neo"} ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
         )
@@ -217,7 +271,11 @@ private fun UpdateCard(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        "Проверка и установка APK из GitHub Releases.",
+                        if (BuildConfig.UPDATE_CHANNEL == "dev") {
+                            "Канал Dev: автоматические сборки из main."
+                        } else {
+                            "Канал Stable: проверенные GitHub Releases."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
