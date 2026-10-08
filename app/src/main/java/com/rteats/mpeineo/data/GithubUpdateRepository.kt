@@ -8,6 +8,7 @@ import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
 import java.io.File
 import java.security.MessageDigest
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -30,9 +31,14 @@ data class GithubReleaseInfo(
 
 class GithubUpdateRepository(
     private val application: Application,
-    private val httpClient: OkHttpClient,
+    httpClient: OkHttpClient,
     private val gson: Gson,
 ) {
+    private val updateHttpClient = httpClient.newBuilder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .callTimeout(5, TimeUnit.MINUTES)
+        .build()
 
     suspend fun getLatestRelease(): GithubReleaseInfo = withContext(Dispatchers.IO) {
         val request = Request.Builder()
@@ -42,7 +48,7 @@ class GithubUpdateRepository(
             .header("User-Agent", "MPEI-Neo-Android")
             .build()
 
-        httpClient.newCall(request).execute().use { response ->
+        updateHttpClient.newCall(request).execute().use { response ->
             check(response.isSuccessful) {
                 "GitHub Releases returned HTTP ${response.code}"
             }
@@ -98,7 +104,7 @@ class GithubUpdateRepository(
             .header("User-Agent", "MPEI-Neo-Android")
             .build()
 
-        httpClient.newCall(request).execute().use { response ->
+        updateHttpClient.newCall(request).execute().use { response ->
             check(response.isSuccessful) {
                 "APK download returned HTTP ${response.code}"
             }
