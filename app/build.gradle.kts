@@ -4,8 +4,19 @@ plugins {
 }
 
 val appVersionCode = providers.gradleProperty("VERSION_CODE").orNull?.toIntOrNull() ?: 1
-val appVersionName = providers.gradleProperty("VERSION_NAME").orNull ?: "0.2.0-dev"
-val testReleaseSigning = providers.gradleProperty("TEST_RELEASE_SIGNING").orNull == "true"
+val appVersionName = providers.gradleProperty("VERSION_NAME").orNull ?: "0.4.0-dev"
+
+val devStoreFile = providers.environmentVariable("ANDROID_DEV_KEYSTORE_FILE").orNull
+val devStorePassword = providers.environmentVariable("ANDROID_DEV_KEYSTORE_PASSWORD").orNull
+val devKeyAlias = providers.environmentVariable("ANDROID_DEV_KEY_ALIAS").orNull
+val devKeyPassword = providers.environmentVariable("ANDROID_DEV_KEY_PASSWORD").orNull
+val devStoreType = providers.environmentVariable("ANDROID_DEV_KEYSTORE_TYPE").orNull ?: "PKCS12"
+val devSigningReady = listOf(
+    devStoreFile,
+    devStorePassword,
+    devKeyAlias,
+    devKeyPassword,
+).all { !it.isNullOrBlank() }
 
 val releaseStoreFile = providers.environmentVariable("ANDROID_KEYSTORE_FILE").orNull
 val releaseStorePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull
@@ -33,6 +44,16 @@ android {
     }
 
     signingConfigs {
+        if (devSigningReady) {
+            create("ciDev") {
+                storeFile = rootProject.file(devStoreFile!!)
+                storePassword = devStorePassword
+                keyAlias = devKeyAlias
+                keyPassword = devKeyPassword
+                storeType = devStoreType
+            }
+        }
+
         if (releaseSigningReady) {
             create("ciRelease") {
                 storeFile = rootProject.file(releaseStoreFile!!)
@@ -44,15 +65,32 @@ android {
         }
     }
 
+    flavorDimensions += "channel"
+    productFlavors {
+        create("dev") {
+            dimension = "channel"
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appLabel"] = "MPEI Neo Dev"
+            buildConfigField("String", "UPDATE_CHANNEL", "\"dev\"")
+            if (devSigningReady) {
+                signingConfig = signingConfigs.getByName("ciDev")
+            }
+        }
+
+        create("stable") {
+            dimension = "channel"
+            manifestPlaceholders["appLabel"] = "MPEI Neo"
+            buildConfigField("String", "UPDATE_CHANNEL", "\"stable\"")
+            if (releaseSigningReady) {
+                signingConfig = signingConfigs.getByName("ciRelease")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
             isShrinkResources = false
-            signingConfig = when {
-                releaseSigningReady -> signingConfigs.getByName("ciRelease")
-                testReleaseSigning -> signingConfigs.getByName("debug")
-                else -> null
-            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
