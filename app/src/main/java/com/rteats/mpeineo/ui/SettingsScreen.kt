@@ -40,11 +40,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.rteats.mpeineo.BuildConfig
 import com.rteats.mpeineo.MpeiNeoApplication
+import com.rteats.mpeineo.R
 
 @Composable
 internal fun SettingsScreen(
@@ -134,10 +136,19 @@ internal fun SettingsScreen(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text(
-                    "Диагностика",
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_settings_diagnostics),
+                        contentDescription = null,
+                    )
+                    Text(
+                        "Диагностика",
+                        modifier = Modifier.padding(start = 14.dp),
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
                 Text(
                     "Журнал сохраняется между перезапусками и обновлениями. В него не записываются пароли, 2FA-коды, cookie или токены БАРС.",
                     style = MaterialTheme.typography.bodySmall,
@@ -258,7 +269,7 @@ private fun UpdateCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    Icons.Default.Refresh,
+                    painter = painterResource(R.drawable.ic_settings_update),
                     contentDescription = null,
                 )
                 Column(
