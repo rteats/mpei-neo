@@ -160,6 +160,8 @@ internal class BarsViewModel(
     private val _state = MutableStateFlow(BarsUiState())
     val state: StateFlow<BarsUiState> = _state.asStateFlow()
 
+    private var lastWebEvent: String? = null
+
     fun checking(url: String? = null) {
         diagnostics.log("BARS", "state=CHECKING")
         _state.update {
@@ -242,14 +244,18 @@ internal class BarsViewModel(
     }
 
     fun logWebEvent(message: String) {
+        if (message == lastWebEvent) return
+        lastWebEvent = message
         diagnostics.log("BARS_WEB", message)
     }
 
     fun showBrowser() {
+        diagnostics.log("BARS", "session WebView opened")
         _state.update { it.copy(browserVisible = true) }
     }
 
     fun hideBrowser() {
+        diagnostics.log("BARS", "session WebView hidden")
         _state.update { it.copy(browserVisible = false) }
     }
 
