@@ -93,6 +93,7 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
     ) { innerPadding ->
         AppContent(
             viewModel = viewModel,
+            barsViewModel = barsViewModel,
             tab = tab,
             onTabChanged = { tab = it },
             modifier = Modifier
@@ -105,6 +106,7 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
 @Composable
 private fun AppContent(
     viewModel: MainViewModel,
+    barsViewModel: BarsViewModel,
     tab: AppTab,
     onTabChanged: (AppTab) -> Unit,
     modifier: Modifier = Modifier,
