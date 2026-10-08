@@ -130,7 +130,7 @@ internal fun BarsScreen(
 
                     CookieManager.getInstance().apply {
                         setAcceptCookie(true)
-                        setAcceptThirdPartyCookies(view, true)
+                        setAcceptThirdPartyCookies(view, false)
                     }
 
                     view.addJavascriptInterface(
@@ -182,10 +182,15 @@ internal fun BarsScreen(
                                 }
                             },
                             onData = { json ->
-                                viewModel.extractionReceived(json)
+                                view.post {
+                                    CookieManager.getInstance().flush()
+                                    viewModel.extractionReceived(json)
+                                }
                             },
                             onError = { message ->
-                                viewModel.extractionFailed(message)
+                                view.post {
+                                    viewModel.extractionFailed(message)
+                                }
                             },
                         ),
                         BARS_JS_INTERFACE,
