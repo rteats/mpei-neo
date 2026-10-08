@@ -135,14 +135,17 @@ internal fun BarsScreen(
         if (shouldHaveWebView) {
             AndroidView(
                 modifier = when {
-                webIsVisible -> Modifier.fillMaxSize()
-                needsFullViewport -> Modifier
-                    .fillMaxSize()
-                    .alpha(0f)
-                else -> Modifier
-                    .size(1.dp)
-                    .alpha(0f)
-            },
+                    state.browserVisible -> Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 72.dp)
+                    state.authStage == BarsAuthStage.WEB_AUTH -> Modifier.fillMaxSize()
+                    needsFullViewport -> Modifier
+                        .fillMaxSize()
+                        .alpha(0f)
+                    else -> Modifier
+                        .size(1.dp)
+                        .alpha(0f)
+                },
             factory = { context ->
                 WebView(context).also { view ->
                     webView = view
@@ -392,16 +395,24 @@ internal fun BarsScreen(
         }
 
         if (state.browserVisible) {
-            FilledTonalButton(
-                onClick = {
-                    needsFullViewport = false
-                    viewModel.hideBrowser()
-                },
+            Surface(
                 modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(12.dp),
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                tonalElevation = 3.dp,
             ) {
-                Text("Вернуться в приложение")
+                FilledTonalButton(
+                    onClick = {
+                        needsFullViewport = false
+                        viewModel.hideBrowser()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                ) {
+                    Text("Вернуться к оценкам")
+                }
             }
         }
     }
