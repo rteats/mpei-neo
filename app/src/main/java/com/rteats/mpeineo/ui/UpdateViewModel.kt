@@ -43,6 +43,7 @@ internal class UpdateViewModel(
     fun checkForUpdates() {
         if (_state.value.phase == UpdatePhase.CHECKING) return
 
+        container.diagnostics.log("UPDATE", "manual check requested channel=${BuildConfig.UPDATE_CHANNEL}")
         viewModelScope.launch {
             _state.update {
                 it.copy(
@@ -53,7 +54,7 @@ internal class UpdateViewModel(
             }
 
             try {
-                val release = container.updater.getLatestRelease()
+                val release = container.updater.getLatestRelease(BuildConfig.UPDATE_CHANNEL)
                 _state.value = if (release.versionCode > BuildConfig.VERSION_CODE) {
                     UpdateUiState(
                         phase = UpdatePhase.AVAILABLE,
@@ -80,6 +81,10 @@ internal class UpdateViewModel(
 
     fun downloadUpdate() {
         val release = _state.value.release ?: return
+        container.diagnostics.log(
+            "UPDATE",
+            "download requested version=${release.versionName} code=${release.versionCode}",
+        )
         if (_state.value.phase == UpdatePhase.DOWNLOADING) return
 
         viewModelScope.launch {
@@ -125,6 +130,7 @@ internal class UpdateViewModel(
 
     fun installDownloadedUpdate(context: Context) {
         val path = _state.value.downloadedApkPath ?: return
+        container.diagnostics.log("UPDATE", "opening Android installer")
         val file = File(path)
         runCatching {
             context.startActivity(container.updater.createInstallIntent(file))
