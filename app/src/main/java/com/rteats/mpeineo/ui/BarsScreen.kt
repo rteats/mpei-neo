@@ -208,6 +208,13 @@ internal fun BarsScreen(
                                         )
                                     }
 
+                                    if (state.browserVisible) {
+                                        viewModel.logWebEvent(
+                                            "browser mode; leaving navigation untouched path=$currentLocation",
+                                        )
+                                        return@post
+                                    }
+
                                     when {
                                         page.isMarksPage -> {
                                             redirectingToMarks = false
