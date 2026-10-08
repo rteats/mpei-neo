@@ -103,7 +103,10 @@ internal data class BarsActivity(
     val weight: String? = null,
     val weekNum: String? = null,
     val markAndDate: String? = null,
-)
+) {
+    val markValue: Float?
+        get() = markAndDate?.extractFirstNumber()?.toFloatOrNull()
+}
 
 internal enum class BarsActivityType {
     UNDEFINED,
