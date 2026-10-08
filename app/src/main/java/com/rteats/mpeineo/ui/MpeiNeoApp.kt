@@ -41,8 +41,10 @@ private enum class AppTab {
 @Composable
 fun MpeiNeoApp(viewModel: MainViewModel) {
     var tab by rememberSaveable { mutableStateOf(AppTab.SCHEDULE) }
-    val barsViewModel: BarsViewModel = composeViewModel()
     val application = LocalContext.current.applicationContext as MpeiNeoApplication
+    val barsViewModel: BarsViewModel = composeViewModel(
+        factory = BarsViewModel.factory(application.container.diagnostics),
+    )
     val updateViewModel: UpdateViewModel = composeViewModel(
         factory = UpdateViewModel.factory(application.container),
     )
