@@ -81,8 +81,6 @@ internal fun BarsScreen(
     var marksFailureReported by remember { mutableStateOf(false) }
 
     val cacheFresh = state.hasFreshCache()
-    val webIsVisible =
-        state.authStage == BarsAuthStage.WEB_AUTH || state.browserVisible
     val shouldHaveWebView =
         state.authStage != BarsAuthStage.AUTHENTICATED ||
             state.browserVisible ||
