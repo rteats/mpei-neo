@@ -667,39 +667,53 @@ private class BarsJavascriptBridge(
 
 private val BARS_PAGE_STATE_SCRIPT = """
     (function() {
-        try {
-            const path = (window.location.pathname || "").toLowerCase();
-            const hasPassword = !!document.querySelector('input[type="password"]');
-            const marks = !!document.getElementById("div-Student_SemesterSheet__Mark");
-            const studentList = path.indexOf("/student/liststudent") >= 0;
-            const bodyText = ((document.body && document.body.innerText) || "").toLowerCase();
-            const hasOneTimeCodeInput = !!document.querySelector(
-                'input[autocomplete="one-time-code"], ' +
-                'input[name*="code" i], input[id*="code" i]'
-            );
-            const hasTwoFactorUi =
-                hasOneTimeCodeInput ||
-                (
-                    (bodyText.indexOf("двухфактор") >= 0 ||
-                     bodyText.indexOf("код подтверждения") >= 0 ||
-                     bodyText.indexOf("получить код") >= 0 ||
-                     bodyText.indexOf("одноразов") >= 0) &&
-                    !!document.querySelector("form, .modal, [role='dialog']")
+        function reportState() {
+            try {
+                const path = (window.location.pathname || "").toLowerCase();
+                const hasPassword = !!document.querySelector('input[type="password"]');
+                const marks = !!document.getElementById("div-Student_SemesterSheet__Mark");
+                const studentList = path.indexOf("/student/liststudent") >= 0;
+                const bodyText = ((document.body && document.body.textContent) || "").toLowerCase();
+                const hasOneTimeCodeInput = !!document.querySelector(
+                    'input[autocomplete="one-time-code"], ' +
+                    'input[name*="code" i], input[id*="code" i]'
                 );
-            const authFlow =
-                path.indexOf("/auth") >= 0 ||
-                hasTwoFactorUi;
+                const hasTwoFactorUi =
+                    hasOneTimeCodeInput ||
+                    (
+                        (bodyText.indexOf("двухфактор") >= 0 ||
+                         bodyText.indexOf("код подтверждения") >= 0 ||
+                         bodyText.indexOf("получить код") >= 0 ||
+                         bodyText.indexOf("одноразов") >= 0) &&
+                        !!document.querySelector("form, .modal, [role='dialog']")
+                    );
+                const authFlow =
+                    path.indexOf("/auth") >= 0 ||
+                    hasTwoFactorUi;
 
-            MpeiNeoBars.onPageState(JSON.stringify({
-                url: window.location.href,
-                path: path,
-                isLoginPage: hasPassword,
-                isAuthFlow: authFlow,
-                isStudentList: studentList,
-                isMarksPage: marks
-            }));
-        } catch (error) {
-            MpeiNeoBars.onError("Не удалось определить страницу БАРС");
+                MpeiNeoBars.onPageState(JSON.stringify({
+                    url: window.location.href,
+                    path: path,
+                    isLoginPage: hasPassword,
+                    isAuthFlow: authFlow,
+                    isStudentList: studentList,
+                    isMarksPage: marks
+                }));
+
+                if (marks && window.__mpeiNeoBarsStateTimer) {
+                    window.clearInterval(window.__mpeiNeoBarsStateTimer);
+                    window.__mpeiNeoBarsStateTimer = null;
+                }
+            } catch (error) {
+                MpeiNeoBars.onError("Не удалось определить страницу БАРС");
+            }
+        }
+
+        reportState();
+
+        if (!window.__mpeiNeoBarsStateTimer) {
+            window.__mpeiNeoBarsStateTimer =
+                window.setInterval(reportState, 1000);
         }
     })();
 """.trimIndent()
