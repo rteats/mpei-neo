@@ -3,6 +3,7 @@ package com.rteats.mpeineo
 import android.app.Application
 import com.google.gson.GsonBuilder
 import com.rteats.mpeineo.data.FileScheduleCache
+import com.rteats.mpeineo.data.GithubUpdateRepository
 import com.rteats.mpeineo.data.MpeiScheduleRemote
 import com.rteats.mpeineo.data.ScheduleRepository
 import com.rteats.mpeineo.data.UserPreferences
@@ -29,6 +30,7 @@ class AppContainer(application: Application) {
         .build()
 
     val preferences = UserPreferences(application, gson)
+    val updater = GithubUpdateRepository(application, httpClient, gson)
     val repository = ScheduleRepository(
         remote = MpeiScheduleRemote(httpClient, gson),
         cache = FileScheduleCache(application, gson),
