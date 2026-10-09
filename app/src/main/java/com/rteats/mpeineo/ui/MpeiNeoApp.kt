@@ -1,6 +1,5 @@
 package com.rteats.mpeineo.ui
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -29,7 +28,7 @@ import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -45,7 +44,6 @@ import com.rteats.mpeineo.R
 
 private enum class AppTab {
     SCHEDULE,
-    SEARCH,
     BARS,
     MAIL,
     SETTINGS,
@@ -73,15 +71,11 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
         exitDirection = Bottom,
     )
 
-    BackHandler(enabled = tab == AppTab.SEARCH) {
-        tab = AppTab.SCHEDULE
-    }
-
     Scaffold(
         modifier = Modifier.nestedScroll(toolbarScrollBehavior),
         // The toolbar is overlaid by the outer Box; there must be no opaque
         // navigation bar surface or reserved strip underneath it.
-        containerColor = Color.Transparent,
+        containerColor = MaterialTheme.colorScheme.background,
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -93,7 +87,6 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
                 barsViewModel = barsViewModel,
                 updateViewModel = updateViewModel,
                 tab = tab,
-                onTabChanged = { tab = it },
                 // The page draws all the way to the bottom behind the floating
                 // toolbar. Scrollable screens provide their own *scrollable* end
                 // space, so the last row can still be reached when the toolbar is visible.
@@ -113,7 +106,7 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     FloatingDestination(
-                        selected = tab == AppTab.SCHEDULE || tab == AppTab.SEARCH,
+                        selected = tab == AppTab.SCHEDULE,
                         onSelect = { tab = AppTab.SCHEDULE },
                     ) {
                         Icon(Icons.Default.DateRange, contentDescription = "Расписание")
@@ -169,7 +162,6 @@ private fun AppContent(
     barsViewModel: BarsViewModel,
     updateViewModel: UpdateViewModel,
     tab: AppTab,
-    onTabChanged: (AppTab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsState()
@@ -196,24 +188,12 @@ private fun AppContent(
                 state = state,
                 onSelect = viewModel::selectTarget,
                 onToggleFavorite = viewModel::toggleFavorite,
-                onRefresh = viewModel::refresh,
-                onPreviousWeek = viewModel::previousWeek,
-                onNextWeek = viewModel::nextWeek,
-                onCurrentWeek = viewModel::currentWeek,
-                onOpenSearch = { onTabChanged(AppTab.SEARCH) },
-                modifier = Modifier.fillMaxSize(),
-            )
-
-            AppTab.SEARCH -> SearchScreen(
-                state = state,
                 onQueryChanged = viewModel::updateSearchQuery,
                 onTypeChanged = viewModel::setSearchType,
                 onSearch = viewModel::search,
-                onSelect = {
-                    viewModel.selectTarget(it)
-                    onTabChanged(AppTab.SCHEDULE)
-                },
-                onToggleFavorite = viewModel::toggleFavorite,
+                onEnsureAgendaWeek = viewModel::ensureAgendaWeek,
+                onRefreshAgendaWeek = viewModel::refreshAgendaWeek,
+                onRetryAgendaWeek = viewModel::retryAgendaWeek,
                 modifier = Modifier.fillMaxSize(),
             )
 
