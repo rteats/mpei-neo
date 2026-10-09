@@ -40,6 +40,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -79,6 +80,7 @@ internal fun ScheduleDockedSearch(
         SearchBarDefaults.InputField(
             textFieldState = textFieldState,
             searchBarState = searchBarState,
+            modifier = Modifier.testTag("schedule-docked-search"),
             colors = colors.searchBarColors.inputFieldColors,
             onSearch = onSearch,
             placeholder = { Text("Группа, преподаватель или аудитория") },
