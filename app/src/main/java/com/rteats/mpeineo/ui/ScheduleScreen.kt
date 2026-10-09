@@ -586,7 +586,7 @@ private fun DayPage(
     LazyColumn(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = PaddingValues(top = 10.dp, bottom = 16.dp),
+        contentPadding = PaddingValues(top = 10.dp, bottom = 112.dp),
     ) {
         itemsIndexed(
             items = day.lessons,
