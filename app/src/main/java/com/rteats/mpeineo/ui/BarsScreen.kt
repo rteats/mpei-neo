@@ -261,10 +261,15 @@ internal fun BarsScreen(
                                             lastPageStateSignature = ignoredState
                                             viewModel.logWebEvent(ignoredState)
                                         }
-                                        view.evaluateJavascript(
-                                            BARS_STOP_STATE_OBSERVER_SCRIPT,
-                                            null,
-                                        )
+                                        // An old callback may arrive after the fallback
+                                        // has navigated to a legitimate new document.
+                                        // Do not stop the new document's observer.
+                                        if (!isTrustedBarsDocument(view.url.orEmpty())) {
+                                            view.evaluateJavascript(
+                                                BARS_STOP_STATE_OBSERVER_SCRIPT,
+                                                null,
+                                            )
+                                        }
                                         return@post
                                     }
 
