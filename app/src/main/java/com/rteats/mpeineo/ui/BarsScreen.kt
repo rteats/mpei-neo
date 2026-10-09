@@ -150,9 +150,7 @@ internal fun BarsScreen(
         if (shouldHaveWebView) {
             AndroidView(
                 modifier = when {
-                    state.browserVisible -> Modifier
-                        .fillMaxSize()
-                        .padding(bottom = 72.dp)
+                    state.browserVisible -> Modifier.fillMaxSize()
                     state.authStage == BarsAuthStage.WEB_AUTH -> Modifier.fillMaxSize()
                     needsFullViewport -> Modifier
                         .fillMaxSize()
@@ -712,27 +710,6 @@ internal fun BarsScreen(
             )
         }
 
-        if (state.browserVisible) {
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                tonalElevation = 3.dp,
-            ) {
-                FilledTonalButton(
-                    onClick = {
-                        needsFullViewport = false
-                        viewModel.hideBrowser()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                ) {
-                    Text("Вернуться к оценкам")
-                }
-            }
-        }
     }
 }
 
