@@ -69,7 +69,19 @@ internal fun ScheduleDockedSearch(
     val textFieldState = rememberTextFieldState(initialText = state.searchQuery)
     val searchBarState = rememberSearchBarWithGapState()
     val scope = rememberCoroutineScope()
-    val colors = SearchBarDefaults.appBarWithSearchColors()
+    // Keep the search field and its backdrop tonal colors independent of scroll
+    // direction. The Material defaults otherwise morph from appBarContainerColor
+    // to scrolledAppBarContainerColor and scrolledSearchBarContainerColor.
+    val searchContainer = MaterialTheme.colorScheme.surfaceContainerHigh
+    val background = MaterialTheme.colorScheme.background
+    val colors = SearchBarDefaults.appBarWithSearchColors(
+        searchBarColors = SearchBarDefaults.colors(
+            containerColor = searchContainer,
+        ),
+        scrolledSearchBarContainerColor = searchContainer,
+        appBarContainerColor = background,
+        scrolledAppBarContainerColor = background,
+    )
 
     LaunchedEffect(textFieldState) {
         snapshotFlow { textFieldState.text.toString() }
