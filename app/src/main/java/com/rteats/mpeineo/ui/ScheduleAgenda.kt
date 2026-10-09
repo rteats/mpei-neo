@@ -1,5 +1,6 @@
 package com.rteats.mpeineo.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +35,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
@@ -42,7 +44,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rteats.mpeineo.model.ScheduleDay
@@ -54,21 +55,22 @@ import java.util.Locale
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
-// Virtual timeline spanning +/- 100 years, loading only weeks near the viewport.
-// No network requests are made for the other virtual days.
-private const val CENTER_WEEK = 5_200
-private const val TOTAL_WEEKS = CENTER_WEEK * 2 + 1
-private const val CENTER_DAY_INDEX = CENTER_WEEK * 7
-private const val TOTAL_DAYS = TOTAL_WEEKS * 7
+// Bounded native-sticky timeline. Shift this window before reaching an edge.
+// Keys remain stable across shifts, so old weeks stay reachable indefinitely
+// without allocating thousands of stickyHeader intervals at composition time.
+private const val WINDOW_DAYS = 126
+private const val WINDOW_SHIFT_DAYS = 35
+private const val WINDOW_EDGE_DAYS = 21
 // An indicator does not assert that new lessons exist; it only suggests checking.
 private const val SCHEDULE_STALE_AFTER_MS = 30 * 60 * 1000L
 
 /**
- * Calendar-style agenda: a single vertical LazyColumn, not one HorizontalPager
- * for each day. Date headers remain visible in the content flow. Adjacent weeks
- * are loaded on demand and reuse the repository's existing file cache.
+ * Calendar-style agenda with native LazyColumn stickyHeader per date.
+ * Header and lessons belong to the same lazy list; a next date pushes the prior
+ * sticky date away. A sliding window bounds the number of composed intervals,
+ * while date-stable keys and requestScrollToItem preserve scroll position.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun ScheduleAgenda(
     state: MainUiState,
@@ -81,27 +83,49 @@ internal fun ScheduleAgenda(
     val monday = remember(today) {
         today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
     }
-    val todayIndex = CENTER_DAY_INDEX + today.dayOfWeek.value - 1
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = todayIndex)
+    val todayDayOffset = today.dayOfWeek.value - 1
+    val initialWindowStart = todayDayOffset - WINDOW_DAYS / 2
+    var windowStartDay by remember { mutableIntStateOf(initialWindowStart) }
+    val listState = rememberLazyListState(
+        initialFirstVisibleItemIndex = (todayDayOffset - initialWindowStart) * 2,
+    )
     val scope = rememberCoroutineScope()
     val refreshState = rememberPullToRefreshState()
     val selectedId = state.selected?.id
     val selectedType = state.selected?.type
 
     LaunchedEffect(selectedId, selectedType) {
-        listState.scrollToItem(todayIndex)
+        windowStartDay = initialWindowStart
+        listState.requestScrollToItem((todayDayOffset - initialWindowStart) * 2)
     }
 
-    val visibleWeekOffset by remember(listState) {
-        derivedStateOf {
-            (listState.firstVisibleItemIndex / 7) - CENTER_WEEK
+    // Never create the whole multi-year timeline as LazyListScope intervals.
+    // Move 35 days at a time, well before the currently visible day reaches an
+    // edge. requestScrollToItem compensates for the inserted/removed items
+    // synchronously with the next remeasure (each date uses two list items).
+    LaunchedEffect(listState.firstVisibleItemIndex, windowStartDay) {
+        val firstIndex = listState.firstVisibleItemIndex
+        val visibleWindowDay = firstIndex / 2
+        val shift = when {
+            visibleWindowDay < WINDOW_EDGE_DAYS -> -WINDOW_SHIFT_DAYS
+            visibleWindowDay >= WINDOW_DAYS - WINDOW_EDGE_DAYS -> WINDOW_SHIFT_DAYS
+            else -> 0
+        }
+        if (shift != 0) {
+            val offset = listState.firstVisibleItemScrollOffset
+            windowStartDay += shift
+            listState.requestScrollToItem(firstIndex - shift * 2, offset)
         }
     }
-    val visibleDate by remember(listState, monday) {
+
+    val visibleDayOffset by remember(listState, windowStartDay) {
         derivedStateOf {
-            monday.plusDays((listState.firstVisibleItemIndex - CENTER_DAY_INDEX).toLong())
+            windowStartDay + listState.firstVisibleItemIndex / 2
         }
     }
+    val visibleWeekOffset = Math.floorDiv(visibleDayOffset, 7)
+    val visibleDate = monday.plusDays(visibleDayOffset.toLong())
+
     var clockMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -131,7 +155,15 @@ internal fun ScheduleAgenda(
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(
-                    onClick = { scope.launch { listState.animateScrollToItem(todayIndex) } },
+                    onClick = {
+                        scope.launch {
+                            // Recenter even if the user scrolled months away.
+                            windowStartDay = initialWindowStart
+                            listState.requestScrollToItem(
+                                (todayDayOffset - initialWindowStart) * 2,
+                            )
+                        }
+                    },
                 ) {
                     Icon(Icons.Default.DateRange, contentDescription = null)
                     Text("Сегодня")
@@ -171,60 +203,55 @@ internal fun ScheduleAgenda(
             },
             modifier = Modifier.weight(1f),
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
             LazyColumn(
                 modifier = Modifier.fillMaxWidth(),
                 state = listState,
                 contentPadding = PaddingValues(top = 8.dp, bottom = 112.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(
-                    count = TOTAL_DAYS,
-                    key = { it },
-                    contentType = { "agenda-day" },
-                ) { index ->
-                    val relativeWeek = index / 7 - CENTER_WEEK
-                    val date = monday.plusDays((index - CENTER_DAY_INDEX).toLong())
-                    val dayData: ScheduleDay? =
-                        state.agendaWeeks[relativeWeek]?.days
-                            ?.firstOrNull { it.date == date.toString() }
-                            ?: if (relativeWeek == state.weekOffset) {
-                                state.week?.days?.firstOrNull { it.date == date.toString() }
-                            } else null
+                for (dayInWindow in 0 until WINDOW_DAYS) {
+                    val dayOffset = windowStartDay + dayInWindow
+                    val date = monday.plusDays(dayOffset.toLong())
+                    val relativeWeek = Math.floorDiv(dayOffset, 7)
 
-                    LaunchedEffect(selectedId, selectedType, relativeWeek) {
-                        onEnsureWeek(relativeWeek)
-                        // Prefetch only immediate neighbors. Previously visited weeks
-                        // are returned by ScheduleRepository's on-disk cache.
-                        if (index % 7 == 0 || index == todayIndex) {
-                            onEnsureWeek(relativeWeek + 1)
-                            onEnsureWeek(relativeWeek - 1)
-                        }
+                    // One actual header per date: not an overlay or a mirrored
+                    // copy. Compose's native stickyHeader handles the push-off
+                    // animation when the next date arrives.
+                    stickyHeader(
+                        key = "date-header-$dayOffset",
+                        contentType = "date-header",
+                    ) {
+                        AgendaDayHeader(date = date, today = today)
                     }
 
-                    AgendaDaySection(
-                        date = date,
-                        today = today,
-                        day = dayData,
-                        loading = relativeWeek in state.agendaLoadingOffsets ||
-                            (relativeWeek == state.weekOffset && state.isLoading),
-                        failed = relativeWeek in state.agendaFailedOffsets,
-                        onRetry = { onRetryWeek(relativeWeek) },
-                    )
+                    item(
+                        key = "date-content-$dayOffset",
+                        contentType = "date-content",
+                    ) {
+                        val dayData: ScheduleDay? =
+                            state.agendaWeeks[relativeWeek]?.days
+                                ?.firstOrNull { it.date == date.toString() }
+                                ?: if (relativeWeek == state.weekOffset) {
+                                    state.week?.days?.firstOrNull { it.date == date.toString() }
+                                } else null
+
+                        LaunchedEffect(selectedId, selectedType, relativeWeek) {
+                            onEnsureWeek(relativeWeek)
+                            if (dayOffset % 7 == 0 || dayOffset == todayDayOffset) {
+                                onEnsureWeek(relativeWeek + 1)
+                                onEnsureWeek(relativeWeek - 1)
+                            }
+                        }
+
+                        AgendaDaySection(
+                            day = dayData,
+                            loading = relativeWeek in state.agendaLoadingOffsets ||
+                                (relativeWeek == state.weekOffset && state.isLoading),
+                            failed = relativeWeek in state.agendaFailedOffsets,
+                            onRetry = { onRetryWeek(relativeWeek) },
+                        )
+                    }
                 }
-            }
-            // The agenda remains virtualized (70k+ days), so a lightweight pinned
-            // header mirrors Compose stickyHeader behavior without creating tens
-            // of thousands of static LazyListScope entries.
-            if (listState.firstVisibleItemScrollOffset > 0) {
-                AgendaDayHeader(
-                    date = visibleDate,
-                    today = today,
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .zIndex(1f),
-                )
-            }
             }
         }
     }
@@ -233,29 +260,12 @@ internal fun ScheduleAgenda(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun AgendaDaySection(
-    date: LocalDate,
-    today: LocalDate,
     day: ScheduleDay?,
     loading: Boolean,
     failed: Boolean,
     onRetry: () -> Unit,
 ) {
-    val isToday = date == today
-    val language = remember { Locale.forLanguageTag("ru") }
-    val dateFormat = remember { DateTimeFormatter.ofPattern("EEEE, d MMMM", language) }
-    val monthFormat = remember { DateTimeFormatter.ofPattern("LLLL yyyy", language) }
-
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (date.dayOfMonth == 1 || date == today) {
-            Text(
-                date.format(monthFormat).replaceFirstChar { it.titlecase(language) },
-                modifier = Modifier.padding(top = 8.dp),
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        AgendaDayHeader(date = date, today = today)
-
         when {
             day != null -> {
                 if (day.lessons.isEmpty()) {
@@ -303,8 +313,7 @@ private fun AgendaDaySection(
 }
 
 /**
- * Reused for the in-flow and sticky weekday label. Identical tonal surfaces
- * avoid mismatches as the floating header changes to the next date.
+ * Native sticky weekday label, rendered exactly once per date by LazyColumn.
  */
 @Composable
 private fun AgendaDayHeader(
