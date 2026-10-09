@@ -11,13 +11,13 @@ This file names the visible UI pieces using the same terminology as the Compose 
 | Settings tab icon | **Settings navigation item** | `FloatingDestination` | Opens app settings. |
 | Current group / teacher / room card | **Schedule target selector** | `ScheduleTargetSelector` | Tapping the card opens favorites; no explanatory "tap to select" text. |
 | Search input at the top of Schedule | **Docked schedule search** | `ScheduleDockedSearch` (`AppBarWithSearch` + `ExpandedDockedSearchBarWithGap`) | Results expand over the agenda; selecting a result updates the schedule without navigation. |
-| Star button in the current schedule card | **Favorite toggle with badge** | `BadgedBox` + `Badge` + `FilledIconToggleButton` | Toggles current target, displays saved favorites count above the star. |
-| Drop-down list of saved groups / teachers / rooms | **Favorites dropdown** | `DropdownMenu` inside `ScheduleTargetSelector` | Used to switch the current schedule target. |
+| Star button in the current schedule card | **Favorite toggle** | `FilledIconToggleButton` | Toggles the current target with no counter or badge. |
+| Drop-down list of saved groups / teachers / rooms | **Expressive favorites menu** | `DropdownMenu` + shaped `DropdownMenuItem` inside `ScheduleTargetSelector` | Shares the target card's outer rounded shape and width; selected/favorite entries use shaped ripple surfaces. |
 | Date-grouped scrolling schedule | **Agenda timeline** | `ScheduleAgenda` / `LazyColumn` | Virtualized continuous days and weeks; loads adjacent weeks on demand. |
-| Headings such as “Пятница, 9 октября” | **Sticky agenda day header** | `AgendaDayHeader` overlay in `ScheduleAgenda` | Pinned weekday/date while scrolling inside a day; current date uses Material You primaryContainer. |
+| Headings such as “Пятница, 9 октября” | **Native sticky agenda day header** | `LazyColumn.stickyHeader` / `AgendaDayHeader` | The **single** date header scrolls and sticks; the next date pushes the previous one out. Bounded sliding date window prevents a 70k-entry lazy list. |
 | Jump to today | **Today action** | `ScheduleAgenda` | Scrolls to the current date. |
 | Consecutive weeks | **Lazy agenda weeks** | `MainViewModel.ensureAgendaWeek` | Reuses cached weeks, downloads only visible and adjacent weeks. |
-| One lesson block | **Lesson card** | `LessonCard` / `ListItem` | Experimental three-line list: overline = time + type, headline = lesson title, supporting = room/teacher/groups. |
+| One lesson block | **Lesson card** | `LessonCard` / `ListItem` | Time row displays the official MPEI 1–7 period number from its start time (not row index), alongside the lesson type. |
 | Small pill such as “Лекция” | **Lesson type chip** | `LessonTypeChip` | Shown at the trailing end of the overline in a lesson list item. |
 | Refresh current agenda week | **Agenda refresh badge** | `BadgedBox` + `Badge` on refresh `IconButton` inside `ScheduleAgenda` | Shows a dot if visible week's last fetch is older than 30 minutes; does not imply a new timetable exists. Pull-to-refresh still works. |
 | Search result dropdown | **Docked search results** | `ScheduleDockedSearch` | Filter chips, target results and favorites; no separate Search route. |
@@ -101,8 +101,7 @@ The overlaid floating toolbar layout is implemented without changing these SDK t
 - **Search vertical spacing**: `ScheduleDockedSearch` disables its own status-bar inset
   because the outer app scaffold already accounts for it. The unused calendar
   navigation icon is removed, leaving a full-width docked search field.
-- **Pinned weekdays**: `AgendaDayHeader` stays at the top of the timeline as
-  the user scrolls lessons. The header reflects the day of the first visible item.
+- **Pinned weekdays**: one native Compose `stickyHeader` per date in a bounded 126-day lazy window. The date flows into the pinned position and is pushed out by the next date, without a mirrored overlay. The sliding window is recentered before its edges.
 - **Favorites**: the star is a checked `FilledIconToggleButton` with a numeric
   `BadgedBox` / `Badge`; the card still opens the saved-schedules dropdown.
   Removed the instructional text and the duplicate favorites counter.
