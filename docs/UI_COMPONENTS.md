@@ -6,7 +6,7 @@ This file names the visible UI pieces using the same terminology as the Compose 
 | --- | --- | --- | --- |
 | Bottom row of app destinations | **Floating navigation toolbar** / **HorizontalFloatingToolbar** | `HorizontalFloatingToolbar` in `MpeiNeoApp.kt` | Floating pill above the bottom edge; hides on vertical scroll; icon-only Schedule/BARS/Mail/Settings. |
 | Schedule tab icon | **Schedule navigation item** | first `FloatingDestination` / `FilledIconToggleButton` | Search is no longer a separate bottom-navigation destination. |
-| BARS tab icon | **BARS navigation item** | `FloatingDestination` + `ic_nav_bars` | Opens the native BARS dashboard. |
+| BARS tab icon | **BARS navigation item / contextual return** | `FloatingDestination` + `ic_nav_bars` / `ArrowBack` | When the authenticated BARS browser is open, this same navigation slot becomes a back arrow that returns to native grades; no extra overlay button and no moving the other three items. |
 | Mail tab icon | **Mail navigation item** | `FloatingDestination` + `ic_nav_mail` | Opens the embedded OWA WebView. |
 | Settings tab icon | **Settings navigation item** | `FloatingDestination` | Opens app settings. |
 | Current group / teacher / room card | **Schedule target selector** | `ScheduleTargetSelector` | Tapping the card opens favorites; no explanatory "tap to select" text. |
