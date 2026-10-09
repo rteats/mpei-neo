@@ -4,6 +4,12 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.net.http.SslError
+import android.os.SystemClock
+import android.webkit.ConsoleMessage
+import android.webkit.SslErrorHandler
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceResponse
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceError
@@ -161,9 +167,14 @@ internal fun BarsScreen(
 
                     val hasBarsCookies =
                         !CookieManager.getInstance().getCookie(BARS_BASE_URL).isNullOrBlank()
+                    val provider = WebView.getCurrentWebViewPackage()
                     viewModel.logWebEvent(
-                        "webview created cookiesPresent=$hasBarsCookies",
+                        "webview created cookiesPresent=$hasBarsCookies " +
+                            "provider=${provider?.packageName ?: "unknown"} " +
+                            "providerVersion=${provider?.versionName ?: "unknown"} " +
+                            "browser=${state.browserVisible} stage=${state.authStage}",
                     )
+                    viewModel.networkSnapshot("webview-created")
 
                     view.settings.apply {
                         javaScriptEnabled = true
@@ -187,6 +198,9 @@ internal fun BarsScreen(
                     var programmaticRequestToken = 0
                     var programmaticStartedToken = -1
                     var programmaticFinishedToken = -1
+                    var lastLoadStartedAt = SystemClock.elapsedRealtime()
+                    var lastNavigationProgress = -1
+                    var subresourceErrorCount = 0
 
                     fun loadBarsWithWatchdog(
                         targetUrl: String,
@@ -199,8 +213,14 @@ internal fun BarsScreen(
                         // loadUrl. Its callback must not mark the new request completed.
                         programmaticStartedToken = -1
                         programmaticFinishedToken = -1
+                        lastLoadStartedAt = SystemClock.elapsedRealtime()
+                        lastNavigationProgress = -1
                         viewModel.logWebEvent(
-                            "load requested reason=$reason path=${safeBarsLocation(targetUrl)}",
+                            "load requested id=$token reason=$reason " +
+                                "path=${safeBarsLocation(targetUrl)} " +
+                                "priorPath=${safeBarsLocation(view.url.orEmpty())} " +
+                                "browser=${state.browserVisible} loading=${state.isLoading} " +
+                                "viewProgress=${view.progress}",
                         )
                         view.stopLoading()
                         view.loadUrl(targetUrl)
@@ -217,8 +237,14 @@ internal fun BarsScreen(
 
                                 val started = programmaticStartedToken == token
                                 viewModel.logWebEvent(
-                                    "load watchdog fired path=${safeBarsLocation(targetUrl)} started=$started",
+                                    "load watchdog fired id=$token " +
+                                        "path=${safeBarsLocation(targetUrl)} " +
+                                        "started=$started elapsedMs=${SystemClock.elapsedRealtime() - lastLoadStartedAt} " +
+                                        "currentPath=${safeBarsLocation(view.url.orEmpty())} " +
+                                        "progress=${view.progress} lastProgressBucket=$lastNavigationProgress " +
+                                        "failed=$mainFrameFailed browser=${state.browserVisible}",
                                 )
+                                viewModel.probeNetwork("watchdog-id-$token")
                                 view.stopLoading()
 
                                 if (fallbackUrl != null) {
@@ -422,6 +448,40 @@ internal fun BarsScreen(
                         BARS_JS_INTERFACE,
                     )
 
+                    view.webChromeClient = object : WebChromeClient() {
+                        override fun onProgressChanged(view: WebView, newProgress: Int) {
+                            val bucket = when {
+                                newProgress >= 100 -> 100
+                                newProgress >= 75 -> 75
+                                newProgress >= 50 -> 50
+                                newProgress >= 25 -> 25
+                                else -> 0
+                            }
+                            if (bucket != lastNavigationProgress) {
+                                lastNavigationProgress = bucket
+                                viewModel.logWebEvent(
+                                    "progress=$newProgress bucket=$bucket " +
+                                        "path=${safeBarsLocation(view.url.orEmpty())} " +
+                                        "elapsedMs=${SystemClock.elapsedRealtime() - lastLoadStartedAt}",
+                                )
+                            }
+                        }
+
+                        override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
+                            if (consoleMessage.messageLevel() == ConsoleMessage.MessageLevel.ERROR ||
+                                consoleMessage.messageLevel() == ConsoleMessage.MessageLevel.WARNING
+                            ) {
+                                // Never write the console text: it can include private page data.
+                                viewModel.logWebEvent(
+                                    "console level=${consoleMessage.messageLevel()} " +
+                                        "source=${safeBarsLocation(consoleMessage.sourceId())} " +
+                                        "line=${consoleMessage.lineNumber()} message=redacted",
+                                )
+                            }
+                            return true
+                        }
+                    }
+
                     view.webViewClient = object : WebViewClient() {
                         override fun onPageStarted(
                             view: WebView,
@@ -437,15 +497,20 @@ internal fun BarsScreen(
                             }
                             needsFullViewport = true
                             viewModel.updateSessionUrl(url)
+                            lastLoadStartedAt = SystemClock.elapsedRealtime()
                             viewModel.logWebEvent(
-                                "page started path=${safeBarsLocation(url)}",
+                                "page started id=$programmaticRequestToken path=${safeBarsLocation(url)} " +
+                                    "browser=${state.browserVisible} progress=${view.progress}",
                             )
                         }
 
                         override fun onPageFinished(view: WebView, url: String) {
                             viewModel.updateSessionUrl(url)
                             viewModel.logWebEvent(
-                                "page finished path=${safeBarsLocation(url)}",
+                                "page finished id=$programmaticRequestToken " +
+                                    "path=${safeBarsLocation(url)} " +
+                                    "elapsedMs=${SystemClock.elapsedRealtime() - lastLoadStartedAt} " +
+                                    "progress=${view.progress} currentPath=${safeBarsLocation(view.url.orEmpty())}",
                             )
 
                             if (
@@ -467,12 +532,63 @@ internal fun BarsScreen(
                             view.evaluateJavascript(BARS_PAGE_STATE_SCRIPT, null)
                         }
 
+                        override fun onPageCommitVisible(view: WebView, url: String) {
+                            viewModel.logWebEvent(
+                                "page committed path=${safeBarsLocation(url)} progress=${view.progress}",
+                            )
+                        }
+
+                        override fun doUpdateVisitedHistory(
+                            view: WebView,
+                            url: String,
+                            isReload: Boolean,
+                        ) {
+                            viewModel.logWebEvent(
+                                "navigation history path=${safeBarsLocation(url)} reload=$isReload",
+                            )
+                        }
+
+                        override fun onReceivedHttpError(
+                            view: WebView,
+                            request: WebResourceRequest,
+                            errorResponse: WebResourceResponse,
+                        ) {
+                            if (request.isForMainFrame) {
+                                viewModel.logWebEvent(
+                                    "main-frame HTTP error status=${errorResponse.statusCode} " +
+                                        "path=${safeBarsLocation(request.url.toString())}",
+                                )
+                                viewModel.probeNetwork("main-http-${errorResponse.statusCode}")
+                            }
+                        }
+
+                        override fun onReceivedSslError(
+                            view: WebView,
+                            handler: SslErrorHandler,
+                            error: SslError,
+                        ) {
+                            viewModel.logWebEvent(
+                                "SSL error primary=${error.primaryError} " +
+                                    "path=${safeBarsLocation(error.url.orEmpty())}",
+                            )
+                            viewModel.probeNetwork("webview-ssl-error")
+                            handler.cancel()
+                        }
+
                         override fun onReceivedError(
                             view: WebView,
                             request: WebResourceRequest,
                             error: WebResourceError,
                         ) {
-                            if (!request.isForMainFrame) return
+                            if (!request.isForMainFrame) {
+                                if (subresourceErrorCount++ < 5) {
+                                    viewModel.logWebEvent(
+                                        "subresource error code=${error.errorCode} " +
+                                            "path=${safeBarsLocation(request.url.toString())}",
+                                    )
+                                }
+                                return
+                            }
 
                             mainFrameFailed = true
                             view.evaluateJavascript(
@@ -487,8 +603,11 @@ internal fun BarsScreen(
                                     mainFrameRetryCount < 1
 
                             viewModel.logWebEvent(
-                                "main-frame error path=${safeBarsLocation(failedUrl)} code=${error.errorCode} retry=$canRetry",
+                                "main-frame error path=${safeBarsLocation(failedUrl)} " +
+                                    "code=${error.errorCode} retry=$canRetry " +
+                                    "progress=${view.progress} elapsedMs=${SystemClock.elapsedRealtime() - lastLoadStartedAt}",
                             )
+                            viewModel.probeNetwork("webview-error-${error.errorCode}")
 
                             if (canRetry) {
                                 mainFrameRetryCount += 1
@@ -538,6 +657,12 @@ internal fun BarsScreen(
                             request: WebResourceRequest,
                         ): Boolean {
                             val uri = request.url
+                            if (request.isForMainFrame) {
+                                viewModel.logWebEvent(
+                                    "navigation requested path=${safeBarsLocation(uri.toString())} " +
+                                        "gesture=${request.hasGesture()} main=true",
+                                )
+                            }
                             if (uri.scheme == "https" && uri.host == "bars.mpei.ru") {
                                 return false
                             }
@@ -565,7 +690,11 @@ internal fun BarsScreen(
                 webView = view
             },
                 onRelease = { view ->
-                    viewModel.logWebEvent("webview released")
+                    viewModel.logWebEvent(
+                        "webview released stage=${state.authStage} browser=${state.browserVisible} " +
+                            "cacheFresh=${state.hasFreshCache()} loading=${state.isLoading} " +
+                            "path=${safeBarsLocation(view.url.orEmpty())} progress=${view.progress}",
+                    )
                     view.stopLoading()
                     view.removeJavascriptInterface(BARS_JS_INTERFACE)
                     view.webViewClient = WebViewClient()
