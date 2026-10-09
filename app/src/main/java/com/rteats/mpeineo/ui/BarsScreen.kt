@@ -33,7 +33,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ContainedLoadingIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -44,6 +45,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -728,6 +731,7 @@ internal fun BarsScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun BarsCheckingState(
     error: String?,
@@ -743,7 +747,7 @@ private fun BarsCheckingState(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (error == null) {
-                CircularProgressIndicator()
+                ContainedLoadingIndicator()
                 Text(
                     "Проверяем сессию БАРС…",
                     style = MaterialTheme.typography.bodyMedium,
@@ -764,6 +768,7 @@ private fun BarsCheckingState(
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun BarsNativeDashboard(
     state: BarsUiState,
@@ -780,9 +785,18 @@ private fun BarsNativeDashboard(
         }
     }
 
+    val refreshState = rememberPullToRefreshState()
     PullToRefreshBox(
         isRefreshing = state.isLoading,
         onRefresh = onRefresh,
+        state = refreshState,
+        indicator = {
+            PullToRefreshDefaults.LoadingIndicator(
+                state = refreshState,
+                isRefreshing = state.isLoading,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
+        },
         modifier = Modifier.fillMaxSize(),
     ) {
         LazyColumn(
