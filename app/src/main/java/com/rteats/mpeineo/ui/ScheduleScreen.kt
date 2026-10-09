@@ -170,6 +170,7 @@ internal fun ScheduleScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ScheduleTargetSelector(
     target: ScheduleTarget,
@@ -608,7 +609,9 @@ internal fun LessonCard(lesson: Lesson) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "${lesson.startTime}–${lesson.endTime}",
+                        text = lessonPeriodNumber(lesson.startTime)?.let { number ->
+                            "${number}-я пара · ${lesson.startTime}–${lesson.endTime}"
+                        } ?: "${lesson.startTime}–${lesson.endTime}",
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold,
