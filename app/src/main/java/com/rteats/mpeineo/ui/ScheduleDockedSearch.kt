@@ -82,7 +82,7 @@ internal fun ScheduleDockedSearch(
             searchBarState = searchBarState,
             modifier = Modifier.testTag("schedule-docked-search"),
             colors = colors.searchBarColors.inputFieldColors,
-            onSearch = onSearch,
+            onSearch = { onSearch() },
             placeholder = { Text("Группа, преподаватель или аудитория") },
             leadingIcon = {
                 if (searchBarState.currentValue == SearchBarValue.Expanded) {
