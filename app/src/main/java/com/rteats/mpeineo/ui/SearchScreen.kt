@@ -159,7 +159,7 @@ internal fun SearchScreen(
 
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(bottom = 16.dp),
+            contentPadding = PaddingValues(bottom = 112.dp),
         ) {
             items(
                 items = state.searchResults,
