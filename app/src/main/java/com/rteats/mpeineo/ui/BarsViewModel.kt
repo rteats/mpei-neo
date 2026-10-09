@@ -254,7 +254,12 @@ internal class BarsViewModel(
     }
 
     fun extractionFailed(message: String) {
-        diagnostics.log("BARS", "error=$message")
+        // A page-state observer may report the same failure repeatedly.
+        // Preserve previously extracted grades without flooding diagnostics.
+        val current = _state.value
+        if (!current.isLoading && current.error == message) return
+
+        diagnostics.log("BARS", "error=$message cachedGrades=${current.lastUpdatedAtMillis > 0L}")
         _state.update {
             it.copy(
                 isLoading = false,
