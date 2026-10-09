@@ -880,7 +880,9 @@ private fun BarsNativeDashboard(
             }
 
             item {
-                Spacer(Modifier.size(8.dp))
+                // Scrollable trailing space lets the last discipline move above
+                // the overlaid floating toolbar without an opaque bottom footer.
+                Spacer(Modifier.size(112.dp))
             }
         }
     }
