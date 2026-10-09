@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -103,9 +104,10 @@ internal fun ScheduleDockedSearch(
         state = searchBarState,
         colors = colors,
         inputField = inputField,
-        navigationIcon = {
-            Icon(Icons.Default.DateRange, contentDescription = null)
-        },
+        // Outer Scaffold already applies the status bar inset. A second inset
+        // inserted here caused the blank strip above search.
+        windowInsets = WindowInsets(0, 0, 0, 0),
+        // No leading calendar action: the search field receives the full width.
     )
 
     ExpandedDockedSearchBarWithGap(
