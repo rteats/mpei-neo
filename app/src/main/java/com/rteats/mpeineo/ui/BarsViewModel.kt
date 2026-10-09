@@ -2,8 +2,12 @@ package com.rteats.mpeineo.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import android.os.SystemClock
 import com.google.gson.Gson
 import com.rteats.mpeineo.data.DiagnosticLog
+import com.rteats.mpeineo.data.BarsNetworkDiagnostics
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -160,12 +164,14 @@ internal object BarsPayloadParser {
 
 internal class BarsViewModel(
     private val diagnostics: DiagnosticLog,
+    private val network: BarsNetworkDiagnostics,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(BarsUiState())
     val state: StateFlow<BarsUiState> = _state.asStateFlow()
 
     private var lastWebEvent: String? = null
+    private var lastProbeAtMillis = -10_000L
 
     fun checking(url: String? = null) {
         val current = _state.value
@@ -294,6 +300,22 @@ internal class BarsViewModel(
         diagnostics.log("BARS_WEB", message)
     }
 
+    fun networkSnapshot(reason: String) {
+        network.snapshot(reason)
+    }
+
+    fun probeNetwork(reason: String) {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastProbeAtMillis < 5_000L) {
+            diagnostics.log("BARS_NET", "probe rate-limited reason=$reason")
+            return
+        }
+        lastProbeAtMillis = now
+        viewModelScope.launch {
+            network.probe(reason)
+        }
+    }
+
     fun showBrowser() {
         diagnostics.log("BARS", "session WebView opened")
         _state.update { it.copy(browserVisible = true) }
@@ -305,11 +327,14 @@ internal class BarsViewModel(
     }
 
     companion object {
-        fun factory(diagnostics: DiagnosticLog): ViewModelProvider.Factory =
+        fun factory(
+            diagnostics: DiagnosticLog,
+            network: BarsNetworkDiagnostics,
+        ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    BarsViewModel(diagnostics) as T
+                    BarsViewModel(diagnostics, network) as T
             }
     }
 }
