@@ -20,11 +20,11 @@ class UiSmokeTest {
     @Test
     fun primaryDestinationsRender() {
         composeRule
-            .onNodeWithContentDescription("Поиск расписания")
+            .onNodeWithTag("schedule-docked-search")
             .performClick()
 
         composeRule
-            .onNodeWithText("Группа, преподаватель или аудитория")
+            .onNodeWithText("Все")
             .assertIsDisplayed()
 
         composeRule
