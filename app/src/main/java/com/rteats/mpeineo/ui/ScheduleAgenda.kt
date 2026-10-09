@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,6 +17,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -30,12 +34,15 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rteats.mpeineo.model.ScheduleDay
@@ -45,6 +52,7 @@ import java.time.temporal.TemporalAdjusters
 import java.time.DayOfWeek
 import java.util.Locale
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 // Virtual timeline spanning +/- 100 years, loading only weeks near the viewport.
 // No network requests are made for the other virtual days.
@@ -52,6 +60,8 @@ private const val CENTER_WEEK = 5_200
 private const val TOTAL_WEEKS = CENTER_WEEK * 2 + 1
 private const val CENTER_DAY_INDEX = CENTER_WEEK * 7
 private const val TOTAL_DAYS = TOTAL_WEEKS * 7
+// An indicator does not assert that new lessons exist; it only suggests checking.
+private const val SCHEDULE_STALE_AFTER_MS = 30 * 60 * 1000L
 
 /**
  * Calendar-style agenda: a single vertical LazyColumn, not one HorizontalPager
@@ -87,6 +97,24 @@ internal fun ScheduleAgenda(
             (listState.firstVisibleItemIndex / 7) - CENTER_WEEK
         }
     }
+    val visibleDate by remember(listState, monday) {
+        derivedStateOf {
+            monday.plusDays((listState.firstVisibleItemIndex - CENTER_DAY_INDEX).toLong())
+        }
+    }
+    var clockMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000L)
+            clockMillis = System.currentTimeMillis()
+        }
+    }
+    val visibleWeek = state.agendaWeeks[visibleWeekOffset]
+        ?: state.week?.takeIf { state.weekOffset == visibleWeekOffset }
+    val needsRefresh = visibleWeek?.let {
+        it.fetchedAtEpochMillis <= 0 ||
+            clockMillis - it.fetchedAtEpochMillis > SCHEDULE_STALE_AFTER_MS
+    } == true
 
     Column(modifier = modifier) {
         Row(
@@ -95,8 +123,10 @@ internal fun ScheduleAgenda(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                "Лента расписания",
-                style = MaterialTheme.typography.titleMedium,
+                visibleDate.format(
+                    remember { DateTimeFormatter.ofPattern("LLLL yyyy", Locale.forLanguageTag("ru")) },
+                ).replaceFirstChar { it.titlecase(Locale.forLanguageTag("ru")) },
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -109,7 +139,21 @@ internal fun ScheduleAgenda(
                 IconButton(
                     onClick = { onRefreshWeek(visibleWeekOffset) },
                 ) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Обновить текущую неделю")
+                    BadgedBox(
+                        badge = { if (needsRefresh) Badge() },
+                    ) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = if (needsRefresh) {
+                                "Обновить расписание: данные старше 30 минут"
+                            } else {
+                                "Обновить текущую неделю"
+                            },
+                            tint = if (needsRefresh) {
+                                MaterialTheme.colorScheme.primary
+                            } else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }
@@ -127,6 +171,7 @@ internal fun ScheduleAgenda(
             },
             modifier = Modifier.weight(1f),
         ) {
+            Box(modifier = Modifier.fillMaxSize()) {
             LazyColumn(
                 modifier = Modifier.fillMaxWidth(),
                 state = listState,
@@ -168,6 +213,19 @@ internal fun ScheduleAgenda(
                     )
                 }
             }
+            // The agenda remains virtualized (70k+ days), so a lightweight pinned
+            // header mirrors Compose stickyHeader behavior without creating tens
+            // of thousands of static LazyListScope entries.
+            if (listState.firstVisibleItemScrollOffset > 0) {
+                AgendaDayHeader(
+                    date = visibleDate,
+                    today = today,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .zIndex(1f),
+                )
+            }
+            }
         }
     }
 }
@@ -196,26 +254,7 @@ private fun AgendaDaySection(
                 color = MaterialTheme.colorScheme.primary,
             )
         }
-        Surface(
-            shape = MaterialTheme.shapes.medium,
-            color = if (isToday) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerLow
-            },
-        ) {
-            Text(
-                date.format(dateFormat).replaceFirstChar { it.titlecase(language) } +
-                    if (isToday) " • Сегодня" else "",
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
-                style = MaterialTheme.typography.titleSmall,
-                color = if (isToday) {
-                    MaterialTheme.colorScheme.onPrimaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
-            )
-        }
+        AgendaDayHeader(date = date, today = today)
 
         when {
             day != null -> {
@@ -260,5 +299,38 @@ private fun AgendaDaySection(
                 )
             }
         }
+    }
+}
+
+/**
+ * Reused for the in-flow and sticky weekday label. Identical tonal surfaces
+ * avoid mismatches as the floating header changes to the next date.
+ */
+@Composable
+private fun AgendaDayHeader(
+    date: LocalDate,
+    today: LocalDate,
+    modifier: Modifier = Modifier,
+) {
+    val language = remember { Locale.forLanguageTag("ru") }
+    val dateFormat = remember { DateTimeFormatter.ofPattern("EEEE, d MMMM", language) }
+    val isToday = date == today
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = if (isToday) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Text(
+            date.format(dateFormat).replaceFirstChar { it.titlecase(language) } +
+                if (isToday) " • Сегодня" else "",
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = if (isToday) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
