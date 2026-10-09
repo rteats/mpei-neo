@@ -61,6 +61,9 @@ and `ContainedLoadingIndicatorSample`.
 - **Floating navigation toolbar**: `HorizontalFloatingToolbar` with
   `FloatingToolbarDefaults.exitAlwaysScrollBehavior(Bottom)`. Navigation controls are
   filled icon toggle buttons and reflect the active destination. Search counts as Schedule.
+  The toolbar overlays full-height page content; its surrounding area is transparent,
+  and there is no bottom navigation surface. Scrollable lists use trailing scroll content
+  padding so the last lesson, grade, or setting can still scroll above the toolbar.
 - **Favorite toggle**: `FilledIconToggleButton`, including search results.
 - **Lesson item**: `ListItem` presented in a tinted, rounded `Surface`; readable time and
   full room/lecturer/group information are retained.
@@ -71,3 +74,11 @@ and `ContainedLoadingIndicatorSample`.
 
 This experiment does not change schedule fetching, BARS authentication, grades caching,
 or the dev/stable updater channels.
+
+## Android API levels
+
+- `compileSdk`: Android 37.0, required by the experimental Material 3 1.5.0-alpha29 dependency; it does **not** raise the minimum device version.
+- `targetSdk`: Android 16 (36). Changes Android compatibility behavior and applies to Google Play publication requirements; independent of `compileSdk`.
+- `minSdk`: Android 8 (26). Determines the oldest Android device able to install MPEI Neo.
+
+The overlaid floating toolbar layout is implemented without changing these SDK targets.
