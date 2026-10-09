@@ -119,7 +119,7 @@ class MainViewModel(
 
     fun selectTarget(target: ScheduleTarget) {
         // Cancel in-flight agenda pages when selecting a different group/person/room.
-        agendaJobs.values.forEach(Job::cancel)
+        agendaJobs.values.forEach { it.cancel() }
         agendaJobs.clear()
         loadJob?.cancel()
         _state.update {
