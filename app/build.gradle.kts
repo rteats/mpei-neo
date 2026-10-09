@@ -32,7 +32,7 @@ val releaseSigningReady = listOf(
 
 android {
     namespace = "com.rteats.mpeineo"
-    compileSdk = 37
+    compileSdk { version = release(37) { minorApiLevel = 0 } }
 
     defaultConfig {
         applicationId = "com.rteats.mpeineo"
