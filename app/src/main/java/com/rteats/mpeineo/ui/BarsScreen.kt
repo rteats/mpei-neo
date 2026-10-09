@@ -79,6 +79,8 @@ internal fun BarsScreen(
     var marksRouteRecoveryAttempted by remember { mutableStateOf(false) }
     var marksWaitLogged by remember { mutableStateOf(false) }
     var marksFailureReported by remember { mutableStateOf(false) }
+    var mainFrameFailed by remember { mutableStateOf(false) }
+    var mainFrameRetryCount by remember { mutableStateOf(0) }
 
     val cacheFresh = state.hasFreshCache()
     val shouldHaveWebView =
@@ -332,6 +334,9 @@ internal fun BarsScreen(
                             marksExtractionStarted = false
                             marksMissingPolls = 0
                             marksWaitLogged = false
+                            if (url.startsWith(BARS_BASE_URL)) {
+                                mainFrameFailed = false
+                            }
                             needsFullViewport = true
                             viewModel.updateSessionUrl(url)
                             viewModel.logWebEvent(
@@ -344,6 +349,21 @@ internal fun BarsScreen(
                             viewModel.logWebEvent(
                                 "page finished path=${safeBarsLocation(url)}",
                             )
+
+                            if (
+                                mainFrameFailed ||
+                                url.startsWith("chrome-error://") ||
+                                url.startsWith("chromewebdata")
+                            ) {
+                                viewModel.logWebEvent(
+                                    "ignoring WebView error document",
+                                )
+                                return
+                            }
+
+                            if (url.startsWith(BARS_BASE_URL)) {
+                                mainFrameRetryCount = 0
+                            }
                             view.evaluateJavascript(BARS_PAGE_STATE_SCRIPT, null)
                         }
 
@@ -352,13 +372,45 @@ internal fun BarsScreen(
                             request: WebResourceRequest,
                             error: WebResourceError,
                         ) {
-                            if (request.isForMainFrame) {
-                                needsFullViewport = false
+                            if (!request.isForMainFrame) return
+
+                            mainFrameFailed = true
+                            view.evaluateJavascript(
+                                BARS_STOP_STATE_OBSERVER_SCRIPT,
+                                null,
+                            )
+
+                            val failedUrl = request.url.toString()
+                            val canRetry =
+                                isRetryableBarsWebError(error.errorCode) &&
+                                    failedUrl.startsWith(BARS_BASE_URL) &&
+                                    mainFrameRetryCount < 1
+
+                            viewModel.logWebEvent(
+                                "main-frame error path=${safeBarsLocation(failedUrl)} code=${error.errorCode} retry=$canRetry",
+                            )
+
+                            if (canRetry) {
+                                mainFrameRetryCount += 1
                                 viewModel.logWebEvent(
-                                    "main-frame error path=${safeBarsLocation(request.url.toString())} code=${error.errorCode}",
+                                    "retrying BARS main frame in 1500ms",
                                 )
+                                view.postDelayed(
+                                    {
+                                        if (webView === view) {
+                                            mainFrameFailed = false
+                                            view.loadUrl(failedUrl)
+                                        }
+                                    },
+                                    1_500L,
+                                )
+                                return
+                            }
+
+                            if (!state.browserVisible) {
+                                needsFullViewport = false
                                 viewModel.extractionFailed(
-                                    "Не удалось открыть БАРС: ${error.description}",
+                                    "Не удалось открыть БАРС: ${error.description}. Нажмите «Повторить».",
                                 )
                             }
                         }
@@ -937,6 +989,12 @@ private fun safeBarsLocation(rawUrl: String): String =
         val uri = Uri.parse(rawUrl)
         "${uri.host.orEmpty()}${uri.path.orEmpty()}"
     }.getOrDefault("unparseable")
+
+private fun isRetryableBarsWebError(errorCode: Int): Boolean =
+    errorCode == WebViewClient.ERROR_TIMEOUT ||
+        errorCode == WebViewClient.ERROR_CONNECT ||
+        errorCode == WebViewClient.ERROR_HOST_LOOKUP ||
+        errorCode == WebViewClient.ERROR_UNKNOWN
 
 private const val BARS_JS_INTERFACE = "MpeiNeoBars"
 
