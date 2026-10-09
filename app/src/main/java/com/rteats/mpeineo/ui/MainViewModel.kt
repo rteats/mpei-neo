@@ -30,6 +30,9 @@ data class MainUiState(
     val source: ScheduleSource? = null,
     val isLoading: Boolean = false,
     val error: String? = null,
+    val agendaWeeks: Map<Int, ScheduleWeek> = emptyMap(),
+    val agendaLoadingOffsets: Set<Int> = emptySet(),
+    val agendaFailedOffsets: Set<Int> = emptySet(),
     val searchQuery: String = "",
     val searchType: ScheduleTargetType? = null,
     val searchResults: List<ScheduleTarget> = emptyList(),
@@ -47,6 +50,7 @@ class MainViewModel(
 
     private var searchJob: Job? = null
     private var loadJob: Job? = null
+    private val agendaJobs = mutableMapOf<Int, Job>()
 
     init {
         viewModelScope.launch {
@@ -114,19 +118,86 @@ class MainViewModel(
     }
 
     fun selectTarget(target: ScheduleTarget) {
+        // Cancel in-flight agenda pages when selecting a different group/person/room.
+        agendaJobs.values.forEach(Job::cancel)
+        agendaJobs.clear()
+        loadJob?.cancel()
+        _state.update {
+            it.copy(
+                selected = target,
+                weekOffset = 0,
+                week = null,
+                source = null,
+                error = null,
+                agendaWeeks = emptyMap(),
+                agendaLoadingOffsets = emptySet(),
+                agendaFailedOffsets = emptySet(),
+            )
+        }
         viewModelScope.launch {
             container.preferences.setSelected(target)
-            _state.update {
-                it.copy(
-                    selected = target,
-                    weekOffset = 0,
-                    week = null,
-                    source = null,
-                    error = null,
-                )
-            }
-            loadWeek(forceNetwork = false)
         }
+        loadWeek(forceNetwork = false)
+    }
+
+    /**
+     * Lazy agenda week request. Reuses saved weeks first and downloads only
+     * weeks that actually enter the visible agenda. Failures require explicit
+     * retry instead of creating infinite automatic retry loops during scrolling.
+     */
+    fun ensureAgendaWeek(offset: Int) {
+        val snapshot = state.value
+        val target = snapshot.selected ?: return
+        if (
+            offset in snapshot.agendaWeeks ||
+            offset in snapshot.agendaLoadingOffsets ||
+            offset in snapshot.agendaFailedOffsets ||
+            (offset == snapshot.weekOffset && loadJob?.isActive == true)
+        ) return
+
+        val weekStart = mondayFor(LocalDate.now()).plusWeeks(offset.toLong())
+        _state.update { it.copy(agendaLoadingOffsets = it.agendaLoadingOffsets + offset) }
+        val job = viewModelScope.launch {
+            try {
+                val result = container.repository.loadWeek(
+                    target = target,
+                    weekStart = weekStart,
+                    forceNetwork = false,
+                )
+                if (matchesAgendaSelection(target)) {
+                    _state.update {
+                        it.copy(
+                            agendaWeeks = it.agendaWeeks + (offset to result.week),
+                            agendaFailedOffsets = it.agendaFailedOffsets - offset,
+                        )
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Throwable) {
+                if (matchesAgendaSelection(target)) {
+                    _state.update {
+                        it.copy(agendaFailedOffsets = it.agendaFailedOffsets + offset)
+                    }
+                }
+            } finally {
+                agendaJobs.remove(offset)
+                _state.update {
+                    it.copy(agendaLoadingOffsets = it.agendaLoadingOffsets - offset)
+                }
+            }
+        }
+        agendaJobs[offset] = job
+    }
+
+    fun retryAgendaWeek(offset: Int) {
+        _state.update { it.copy(agendaFailedOffsets = it.agendaFailedOffsets - offset) }
+        ensureAgendaWeek(offset)
+    }
+
+    private fun matchesAgendaSelection(target: ScheduleTarget): Boolean {
+        val selected = state.value.selected ?: return false
+        return selected.id == target.id && selected.type == target.type
     }
 
     fun toggleFavorite(target: ScheduleTarget) {
@@ -225,6 +296,7 @@ class MainViewModel(
                 _state.update {
                     it.copy(
                         week = cached.week,
+                        agendaWeeks = it.agendaWeeks + (offset to cached.week),
                         source = cached.source,
                         isLoading = forceNetwork,
                         error = null,
@@ -252,6 +324,7 @@ class MainViewModel(
                     _state.update {
                         it.copy(
                             week = load.week,
+                            agendaWeeks = it.agendaWeeks + (offset to load.week),
                             source = load.source,
                             isLoading = false,
                             error = null,
