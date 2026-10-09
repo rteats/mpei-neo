@@ -22,14 +22,18 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -56,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -808,6 +813,10 @@ private fun BarsNativeDashboard(
                 )
             }
 
+            if (state.disciplines.isNotEmpty()) {
+                item { BarsSemesterSummary(state) }
+            }
+
             state.error?.let { message ->
                 item {
                     val hasCachedGrades = state.disciplines.isNotEmpty()
@@ -888,51 +897,122 @@ private fun BarsNativeDashboard(
     }
 }
 
+/**
+ * Expressive BARS dashboard: dominant profile surface + factual semester
+ * summary + approachable, interactive discipline cards.
+ */
 @Composable
 private fun BarsUserHeader(
     state: BarsUiState,
     onOpenBrowser: () -> Unit,
 ) {
-    Row(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, top = 16.dp, end = 8.dp, bottom = 12.dp),
-        verticalAlignment = Alignment.Top,
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
     ) {
         Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            Text(
+                text = "МОЙ БАРС",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+            )
             Text(
                 text = state.profileName.ifBlank { "БАРС МЭИ" },
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
-                maxLines = 2,
+                maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
-
             if (state.profileGroup.isNotBlank()) {
                 Text(
                     text = state.profileGroup,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.titleSmall,
                 )
             }
-
             if (state.semester.isNotBlank()) {
                 Text(
                     text = state.semester,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            FilledTonalButton(
+                onClick = onOpenBrowser,
+                modifier = Modifier.padding(top = 8.dp),
+            ) {
+                Text("Открыть БАРС")
+                Spacer(Modifier.size(8.dp))
+                androidx.compose.material3.Icon(
+                    Icons.Default.ArrowForward,
+                    contentDescription = null,
                 )
             }
         }
+    }
+}
 
-        FilledTonalButton(
-            onClick = onOpenBrowser,
-            modifier = Modifier.padding(start = 8.dp),
+@Composable
+private fun BarsSemesterSummary(state: BarsUiState) {
+    val gradedCount = state.disciplines.count {
+        it.finalMarkValue != null || it.markValues.isNotEmpty()
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        BarsSummaryStat(
+            value = state.disciplines.size,
+            label = "Дисциплин",
+            modifier = Modifier.weight(1f),
+        )
+        BarsSummaryStat(
+            value = gradedCount,
+            label = "С оценками",
+            modifier = Modifier.weight(1f),
+        )
+        BarsSummaryStat(
+            value = state.controlSchedule.size,
+            label = "Контрольных",
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun BarsSummaryStat(
+    value: Int,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Text("Открыть БАРС")
+            Text(
+                text = value.toString(),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+            )
         }
     }
 }
@@ -946,39 +1026,63 @@ private fun DisciplineCard(
     Card(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(
-                text = discipline.disciplineName,
-                style = MaterialTheme.typography.titleMedium,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Text(
+                    text = discipline.disciplineName,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                androidx.compose.material3.Icon(
+                    Icons.Default.ArrowForward,
+                    contentDescription = "Подробности",
+                    modifier = Modifier.padding(top = 3.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
 
             if (discipline.assessmentType.isNotBlank()) {
-                AssessmentTypeChip(
-                    text = discipline.assessmentType,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
+                AssessmentTypeChip(text = discipline.assessmentType)
             }
 
             if (discipline.personName.isNotBlank()) {
-                Text(
-                    text = discipline.personName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(
-                        top = if (discipline.assessmentType.isNotBlank()) 4.dp else 6.dp,
-                        bottom = 6.dp,
-                    ),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "ПРЕПОДАВАТЕЛЬ",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = discipline.personName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
+
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+            )
+            Text(
+                text = "ОЦЕНКИ",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
             val finalMark = discipline.finalMarkValue
             when {
@@ -990,17 +1094,18 @@ private fun DisciplineCard(
                 }
 
                 discipline.markValues.isNotEmpty() -> {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        discipline.markValues.take(8).forEach { mark ->
+                        discipline.markValues.take(12).forEach { mark ->
                             GradeChip(
                                 text = mark.roundToInt().toString(),
                                 mark = mark,
                             )
                         }
-                        if (discipline.markValues.size > 8) {
-                            NeutralChip("+${discipline.markValues.size - 8}")
+                        if (discipline.markValues.size > 12) {
+                            NeutralChip("+${discipline.markValues.size - 12}")
                         }
                     }
                 }
@@ -1178,7 +1283,7 @@ private fun AssessmentTypeChip(
 ) {
     Surface(
         modifier = modifier,
-        shape = MaterialTheme.shapes.small,
+        shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.secondaryContainer,
         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
     ) {
@@ -1221,7 +1326,7 @@ private fun GradeChip(
     }
 
     Surface(
-        shape = MaterialTheme.shapes.small,
+        shape = RoundedCornerShape(10.dp),
         color = container,
         contentColor = content,
     ) {
@@ -1239,7 +1344,7 @@ private fun NeutralChip(
     text: String,
 ) {
     Surface(
-        shape = MaterialTheme.shapes.small,
+        shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
