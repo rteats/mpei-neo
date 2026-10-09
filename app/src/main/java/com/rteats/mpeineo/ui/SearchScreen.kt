@@ -22,9 +22,13 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledIconToggleButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ContainedLoadingIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -46,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import com.rteats.mpeineo.model.ScheduleTarget
 import com.rteats.mpeineo.model.ScheduleTargetType
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun SearchScreen(
     state: MainUiState,
@@ -135,9 +140,12 @@ internal fun SearchScreen(
         }
 
         if (state.isSearching) {
-            LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                ContainedLoadingIndicator()
+            }
         }
 
         state.searchError?.let { error ->
@@ -210,10 +218,10 @@ internal fun SearchScreen(
                                 )
                             }
                         }
-                        IconButton(
-                            onClick = {
-                                onToggleFavorite(result)
-                            },
+                        FilledIconToggleButton(
+                            checked = favorite,
+                            onCheckedChange = { onToggleFavorite(result) },
+                            shapes = IconButtonDefaults.toggleableShapes(),
                         ) {
                             Icon(
                                 if (favorite) {
