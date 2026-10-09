@@ -34,6 +34,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Button
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -212,34 +214,11 @@ private fun ScheduleTargetSelector(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            target.type.displayName,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                        )
-                        source?.let {
-                            Text(
-                                if (it == ScheduleSource.CACHE) "из кэша" else "обновлено",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                            )
-                        }
-                    }
                     Text(
-                        if (favorites.isEmpty()) {
-                            "Нет избранных • нажмите, чтобы открыть список"
-                        } else {
-                            "Избранное: ${favorites.size} • нажмите, чтобы выбрать"
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 2.dp),
+                        target.type.displayName,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
                     )
                 }
                 Text(
@@ -248,15 +227,29 @@ private fun ScheduleTargetSelector(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 2.dp),
                 )
-                FilledIconToggleButton(
-                    checked = isFavorite,
-                    onCheckedChange = { onToggleFavorite() },
-                    shapes = IconButtonDefaults.toggleableShapes(),
+                BadgedBox(
+                    badge = {
+                        if (favorites.isNotEmpty()) {
+                            Badge {
+                                Text(
+                                    if (favorites.size > 99) "99+" else favorites.size.toString(),
+                                )
+                            }
+                        }
+                    },
                 ) {
-                    Icon(
-                        if (isFavorite) Icons.Default.Star else Icons.Outlined.Star,
-                        contentDescription = "Быстрый доступ",
-                    )
+                    FilledIconToggleButton(
+                        checked = isFavorite,
+                        onCheckedChange = { onToggleFavorite() },
+                        shapes = IconButtonDefaults.toggleableShapes(),
+                    ) {
+                        Icon(
+                            if (isFavorite) Icons.Default.Star else Icons.Outlined.Star,
+                            contentDescription =
+                                "Избранное: ${favorites.size}. " +
+                                if (isFavorite) "Удалить из избранного" else "Добавить в избранное",
+                        )
+                    }
                 }
             }
         }
