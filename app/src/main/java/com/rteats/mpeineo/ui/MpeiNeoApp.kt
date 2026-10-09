@@ -29,6 +29,8 @@ import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -78,6 +80,9 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
 
     Scaffold(
         modifier = Modifier.nestedScroll(toolbarScrollBehavior),
+        // The toolbar is overlaid by the outer Box; there must be no opaque
+        // navigation bar surface or reserved strip underneath it.
+        containerColor = Color.Transparent,
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -90,9 +95,10 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
                 updateViewModel = updateViewModel,
                 tab = tab,
                 onTabChanged = { tab = it },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(bottom = 92.dp),
+                // The page draws all the way to the bottom behind the floating
+                // toolbar. Scrollable screens provide their own *scrollable* end
+                // space, so the last row can still be reached when the toolbar is visible.
+                modifier = Modifier.fillMaxSize(),
             )
 
             HorizontalFloatingToolbar(
