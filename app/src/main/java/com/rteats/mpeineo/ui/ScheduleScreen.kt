@@ -39,14 +39,21 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.ContainedLoadingIndicator
+import androidx.compose.material3.FilledIconToggleButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -78,6 +85,7 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun ScheduleScreen(
     state: MainUiState,
@@ -151,7 +159,12 @@ internal fun ScheduleScreen(
         )
 
         if (state.isLoading && state.week == null) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 28.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                ContainedLoadingIndicator()
+            }
         }
 
         state.error?.let { message ->
@@ -258,7 +271,11 @@ private fun ScheduleTargetSelector(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 2.dp),
                 )
-                IconButton(onClick = onToggleFavorite) {
+                FilledIconToggleButton(
+                    checked = isFavorite,
+                    onCheckedChange = { onToggleFavorite() },
+                    shapes = IconButtonDefaults.toggleableShapes(),
+                ) {
                     Icon(
                         if (isFavorite) Icons.Default.Star else Icons.Outlined.Star,
                         contentDescription = "Быстрый доступ",
@@ -336,7 +353,7 @@ private fun ColumnScope.WeekContent(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ColumnScope.WeekPager(
     week: ScheduleWeek,
@@ -376,9 +393,18 @@ private fun ColumnScope.WeekPager(
         },
     )
 
+    val refreshState = rememberPullToRefreshState()
     PullToRefreshBox(
         isRefreshing = isRefreshing,
         onRefresh = onRefresh,
+        state = refreshState,
+        indicator = {
+            PullToRefreshDefaults.LoadingIndicator(
+                state = refreshState,
+                isRefreshing = isRefreshing,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
+        },
         modifier = Modifier
             .fillMaxWidth()
             .weight(1f),
@@ -588,59 +614,69 @@ private fun isOneHourBreak(previous: Lesson, next: Lesson): Boolean =
         Duration.between(end, start).toMinutes() == 60L
     }.getOrDefault(false)
 
+/**
+ * Three-line Material 3 ListItem experiment:
+ * overline = time + type, headline = lesson, supporting = room / teacher / group.
+ */
 @Composable
 private fun LessonCard(lesson: Lesson) {
-    Card(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = lessonContainerColor(lesson.kind),
-        ),
+        shape = MaterialTheme.shapes.large,
+        color = lessonContainerColor(lesson.kind),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+        ListItem(
+            modifier = Modifier.fillMaxWidth(),
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            overlineContent = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "${lesson.startTime}–${lesson.endTime}",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (lesson.kind.isNotBlank()) {
+                        LessonTypeChip(lesson.kind)
+                    }
+                }
+            },
+            headlineContent = {
                 Text(
-                    text = "${lesson.startTime}–${lesson.endTime}",
-                    modifier = Modifier.weight(1f),
+                    lesson.name,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
                 )
-                if (lesson.kind.isNotBlank()) {
-                    LessonTypeChip(lesson.kind)
+            },
+            supportingContent = {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    if (lesson.place.isNotBlank()) {
+                        Text(
+                            lesson.place,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    if (lesson.lecturer.isNotBlank()) {
+                        Text(
+                            lesson.lecturer,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (lesson.groups.isNotBlank()) {
+                        Text(
+                            lesson.groups,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
-            }
-            Text(
-                lesson.name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-            if (lesson.place.isNotBlank()) {
-                Text(
-                    lesson.place,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-            if (lesson.lecturer.isNotBlank()) {
-                Text(
-                    lesson.lecturer,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (lesson.groups.isNotBlank()) {
-                Text(
-                    lesson.groups,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+            },
+        )
     }
 }
 
