@@ -194,6 +194,10 @@ internal fun BarsScreen(
                     ) {
                         programmaticRequestToken += 1
                         val token = programmaticRequestToken
+                        // An aborted navigation can report onPageFinished after the next
+                        // loadUrl. Its callback must not mark the new request completed.
+                        programmaticStartedToken = -1
+                        programmaticFinishedToken = -1
                         viewModel.logWebEvent(
                             "load requested reason=$reason path=${safeBarsLocation(targetUrl)}",
                         )
@@ -242,6 +246,37 @@ internal fun BarsScreen(
                                     }.getOrElse { error ->
                                         viewModel.extractionFailed(
                                             error.message ?: "Не удалось определить состояние БАРС",
+                                        )
+                                        return@post
+                                    }
+
+                                    // stopLoading() can leave Chromium displaying a blank
+                                    // internal document. Its JS bridge must not transition
+                                    // native BARS state or overwrite the original failure.
+                                    if (!isTrustedBarsDocument(page.url)) {
+                                        val location = safeBarsLocation(page.url)
+                                        val ignoredState = "ignored invalid document $location"
+                                        if (lastPageStateSignature != ignoredState) {
+                                            lastPageStateSignature = ignoredState
+                                            viewModel.logWebEvent(ignoredState)
+                                        }
+                                        view.evaluateJavascript(
+                                            BARS_STOP_STATE_OBSERVER_SCRIPT,
+                                            null,
+                                        )
+                                        return@post
+                                    }
+
+                                    // Discard callbacks sent by an old page after a redirect.
+                                    val currentWebLocation = view.url.orEmpty()
+                                    if (
+                                        currentWebLocation.isNotBlank() &&
+                                        isTrustedBarsDocument(currentWebLocation) &&
+                                        safeBarsLocation(page.url) !=
+                                            safeBarsLocation(currentWebLocation)
+                                    ) {
+                                        viewModel.logWebEvent(
+                                            "ignored stale page state path=${safeBarsLocation(page.url)}",
                                         )
                                         return@post
                                     }
@@ -410,19 +445,20 @@ internal fun BarsScreen(
 
                             if (
                                 mainFrameFailed ||
-                                url.startsWith("chrome-error://") ||
-                                url.startsWith("chromewebdata")
+                                !isTrustedBarsDocument(url)
                             ) {
                                 viewModel.logWebEvent(
-                                    "ignoring WebView error document",
+                                    "ignoring failed or internal WebView document",
                                 )
                                 return
                             }
 
-                            if (url.startsWith(BARS_BASE_URL)) {
-                                mainFrameRetryCount = 0
+                            // A cancelled navigation can finish after the watchdog starts
+                            // a fallback. Do not let it complete the fallback's token.
+                            if (programmaticStartedToken == programmaticRequestToken) {
                                 programmaticFinishedToken = programmaticRequestToken
                             }
+                            mainFrameRetryCount = 0
                             view.evaluateJavascript(BARS_PAGE_STATE_SCRIPT, null)
                         }
 
@@ -1072,6 +1108,13 @@ private fun safeBarsLocation(rawUrl: String): String =
         val uri = Uri.parse(rawUrl)
         "${uri.host.orEmpty()}${uri.path.orEmpty()}"
     }.getOrDefault("unparseable")
+
+private fun isTrustedBarsDocument(url: String): Boolean =
+    runCatching {
+        val uri = Uri.parse(url)
+        uri.scheme == "https" &&
+            uri.host.equals("bars.mpei.ru", ignoreCase = true)
+    }.getOrDefault(false)
 
 private fun isRetryableBarsWebError(errorCode: Int): Boolean =
     errorCode == WebViewClient.ERROR_TIMEOUT ||
