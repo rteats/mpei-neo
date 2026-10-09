@@ -183,6 +183,55 @@ internal fun BarsScreen(
                         setAcceptCookie(true)
                         setAcceptThirdPartyCookies(view, false)
                     }
+                    var programmaticRequestToken = 0
+                    var programmaticStartedToken = -1
+                    var programmaticFinishedToken = -1
+
+                    fun loadBarsWithWatchdog(
+                        targetUrl: String,
+                        reason: String,
+                        fallbackUrl: String? = null,
+                    ) {
+                        programmaticRequestToken += 1
+                        val token = programmaticRequestToken
+                        viewModel.logWebEvent(
+                            "load requested reason=$reason path=${safeBarsLocation(targetUrl)}",
+                        )
+                        view.stopLoading()
+                        view.loadUrl(targetUrl)
+
+                        view.postDelayed(
+                            {
+                                if (
+                                    webView !== view ||
+                                    programmaticRequestToken != token ||
+                                    programmaticFinishedToken == token
+                                ) {
+                                    return@postDelayed
+                                }
+
+                                val started = programmaticStartedToken == token
+                                viewModel.logWebEvent(
+                                    "load watchdog fired path=${safeBarsLocation(targetUrl)} started=$started",
+                                )
+                                view.stopLoading()
+
+                                if (fallbackUrl != null) {
+                                    loadBarsWithWatchdog(
+                                        targetUrl = fallbackUrl,
+                                        reason = "watchdog fallback",
+                                        fallbackUrl = null,
+                                    )
+                                } else if (!state.browserVisible) {
+                                    needsFullViewport = false
+                                    viewModel.extractionFailed(
+                                        "БАРС не отвечает. Проверьте сеть и нажмите «Повторить».",
+                                    )
+                                }
+                            },
+                            12_000L,
+                        )
+                    }
 
                     view.addJavascriptInterface(
                         BarsJavascriptBridge(
@@ -263,7 +312,11 @@ internal fun BarsScreen(
                                                     viewModel.logWebEvent(
                                                         "marks DOM timeout; bootstrapping through BARS root",
                                                     )
-                                                    view.loadUrl(BARS_LOGIN_URL)
+                                                    loadBarsWithWatchdog(
+                                                        targetUrl = BARS_LOGIN_URL,
+                                                        reason = "marks DOM recovery",
+                                                        fallbackUrl = null,
+                                                    )
                                                 }
 
                                                 marksMissingPolls >= 10 &&
@@ -291,7 +344,11 @@ internal fun BarsScreen(
                                                 viewModel.logWebEvent(
                                                     "authenticated BARS root; opening marks route",
                                                 )
-                                                view.loadUrl(BARS_MARKS_URL)
+                                                loadBarsWithWatchdog(
+                                                    targetUrl = BARS_MARKS_URL,
+                                                    reason = "open marks route",
+                                                    fallbackUrl = BARS_LOGIN_URL,
+                                                )
                                             }
                                         }
 
@@ -336,6 +393,7 @@ internal fun BarsScreen(
                             marksWaitLogged = false
                             if (url.startsWith(BARS_BASE_URL)) {
                                 mainFrameFailed = false
+                                programmaticStartedToken = programmaticRequestToken
                             }
                             needsFullViewport = true
                             viewModel.updateSessionUrl(url)
@@ -363,6 +421,7 @@ internal fun BarsScreen(
 
                             if (url.startsWith(BARS_BASE_URL)) {
                                 mainFrameRetryCount = 0
+                                programmaticFinishedToken = programmaticRequestToken
                             }
                             view.evaluateJavascript(BARS_PAGE_STATE_SCRIPT, null)
                         }
@@ -392,14 +451,32 @@ internal fun BarsScreen(
 
                             if (canRetry) {
                                 mainFrameRetryCount += 1
+                                val retryUrl =
+                                    if (
+                                        hasBarsCookies &&
+                                        safeBarsLocation(failedUrl) ==
+                                            safeBarsLocation(BARS_LOGIN_URL)
+                                    ) {
+                                        BARS_MARKS_URL
+                                    } else {
+                                        failedUrl
+                                    }
+
                                 viewModel.logWebEvent(
-                                    "retrying BARS main frame in 1500ms",
+                                    "retrying BARS main frame in 1500ms target=${safeBarsLocation(retryUrl)}",
                                 )
                                 view.postDelayed(
                                     {
                                         if (webView === view) {
                                             mainFrameFailed = false
-                                            view.loadUrl(failedUrl)
+                                            viewModel.logWebEvent(
+                                                "retry fired target=${safeBarsLocation(retryUrl)}",
+                                            )
+                                            loadBarsWithWatchdog(
+                                                targetUrl = retryUrl,
+                                                reason = "main-frame retry",
+                                                fallbackUrl = null,
+                                            )
                                         }
                                     },
                                     1_500L,
@@ -431,10 +508,16 @@ internal fun BarsScreen(
                         }
                     }
 
+                    val initialFallback =
+                        if (hasBarsCookies) BARS_MARKS_URL else null
                     viewModel.logWebEvent(
                         "initial load path=${safeBarsLocation(BARS_LOGIN_URL)}",
                     )
-                    view.loadUrl(BARS_LOGIN_URL)
+                    loadBarsWithWatchdog(
+                        targetUrl = BARS_LOGIN_URL,
+                        reason = "initial session check",
+                        fallbackUrl = initialFallback,
+                    )
                 }
             },
             update = { view ->
