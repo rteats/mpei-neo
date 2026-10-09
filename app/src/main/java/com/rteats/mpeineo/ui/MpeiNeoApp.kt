@@ -8,14 +8,26 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconToggleButton
+import androidx.compose.material3.FloatingToolbarDefaults
+import androidx.compose.material3.FloatingToolbarExitDirection.Companion.Bottom
+import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -38,6 +50,11 @@ private enum class AppTab {
     SETTINGS,
 }
 
+/**
+ * Floating navigation follows ScrollableHorizontalFloatingToolbarSample.
+ * A selected destination is a FilledIconToggleButton; Search belongs to Schedule.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MpeiNeoApp(viewModel: MainViewModel) {
     var tab by rememberSaveable { mutableStateOf(AppTab.SCHEDULE) }
@@ -51,67 +68,93 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
     val updateViewModel: UpdateViewModel = composeViewModel(
         factory = UpdateViewModel.factory(application.container),
     )
+    val toolbarScrollBehavior = FloatingToolbarDefaults.exitAlwaysScrollBehavior(
+        exitDirection = Bottom,
+    )
 
     BackHandler(enabled = tab == AppTab.SEARCH) {
         tab = AppTab.SCHEDULE
     }
 
     Scaffold(
-        bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = tab == AppTab.SCHEDULE || tab == AppTab.SEARCH,
-                    onClick = { tab = AppTab.SCHEDULE },
-                    icon = {
-                        Icon(
-                            Icons.Default.DateRange,
-                            contentDescription = "Расписание",
-                        )
-                    },
-                )
-                NavigationBarItem(
-                    selected = tab == AppTab.BARS,
-                    onClick = { tab = AppTab.BARS },
-                    icon = {
+        modifier = Modifier.nestedScroll(toolbarScrollBehavior),
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize(),
+        ) {
+            AppContent(
+                viewModel = viewModel,
+                barsViewModel = barsViewModel,
+                updateViewModel = updateViewModel,
+                tab = tab,
+                onTabChanged = { tab = it },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = 92.dp),
+            )
+
+            HorizontalFloatingToolbar(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .offset(y = -FloatingToolbarDefaults.ScreenOffset)
+                    .zIndex(1f),
+                expanded = true,
+                scrollBehavior = toolbarScrollBehavior,
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FloatingDestination(
+                        selected = tab == AppTab.SCHEDULE || tab == AppTab.SEARCH,
+                        onSelect = { tab = AppTab.SCHEDULE },
+                    ) {
+                        Icon(Icons.Default.DateRange, contentDescription = "Расписание")
+                    }
+                    FloatingDestination(
+                        selected = tab == AppTab.BARS,
+                        onSelect = { tab = AppTab.BARS },
+                    ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_nav_bars),
                             contentDescription = "БАРС",
                         )
-                    },
-                )
-                NavigationBarItem(
-                    selected = tab == AppTab.MAIL,
-                    onClick = { tab = AppTab.MAIL },
-                    icon = {
+                    }
+                    FloatingDestination(
+                        selected = tab == AppTab.MAIL,
+                        onSelect = { tab = AppTab.MAIL },
+                    ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_nav_mail),
                             contentDescription = "Почта",
                         )
-                    },
-                )
-                NavigationBarItem(
-                    selected = tab == AppTab.SETTINGS,
-                    onClick = { tab = AppTab.SETTINGS },
-                    icon = {
-                        Icon(
-                            Icons.Default.Settings,
-                            contentDescription = "Настройки",
-                        )
-                    },
-                )
+                    }
+                    FloatingDestination(
+                        selected = tab == AppTab.SETTINGS,
+                        onSelect = { tab = AppTab.SETTINGS },
+                    ) {
+                        Icon(Icons.Default.Settings, contentDescription = "Настройки")
+                    }
+                }
             }
-        },
-    ) { innerPadding ->
-        AppContent(
-            viewModel = viewModel,
-            barsViewModel = barsViewModel,
-            updateViewModel = updateViewModel,
-            tab = tab,
-            onTabChanged = { tab = it },
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize(),
-        )
+        }
+    }
+}
+
+@Composable
+private fun FloatingDestination(
+    selected: Boolean,
+    onSelect: () -> Unit,
+    icon: @Composable () -> Unit,
+) {
+    FilledIconToggleButton(
+        checked = selected,
+        onCheckedChange = { onSelect() },
+        shapes = IconButtonDefaults.toggleableShapes(),
+    ) {
+        icon()
     }
 }
 
