@@ -195,6 +195,44 @@ class MainViewModel(
         ensureAgendaWeek(offset)
     }
 
+    fun refreshAgendaWeek(offset: Int) {
+        val target = state.value.selected ?: return
+        agendaJobs[offset]?.cancel()
+        val weekStart = mondayFor(LocalDate.now()).plusWeeks(offset.toLong())
+        _state.update { it.copy(agendaLoadingOffsets = it.agendaLoadingOffsets + offset) }
+        val job = viewModelScope.launch {
+            try {
+                val result = container.repository.loadWeek(
+                    target = target,
+                    weekStart = weekStart,
+                    forceNetwork = true,
+                )
+                if (matchesAgendaSelection(target)) {
+                    _state.update {
+                        it.copy(
+                            agendaWeeks = it.agendaWeeks + (offset to result.week),
+                            agendaFailedOffsets = it.agendaFailedOffsets - offset,
+                        )
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Throwable) {
+                if (matchesAgendaSelection(target)) {
+                    _state.update {
+                        it.copy(agendaFailedOffsets = it.agendaFailedOffsets + offset)
+                    }
+                }
+            } finally {
+                agendaJobs.remove(offset)
+                _state.update {
+                    it.copy(agendaLoadingOffsets = it.agendaLoadingOffsets - offset)
+                }
+            }
+        }
+        agendaJobs[offset] = job
+    }
+
     private fun matchesAgendaSelection(target: ScheduleTarget): Boolean {
         val selected = state.value.selected ?: return false
         return selected.id == target.id && selected.type == target.type
