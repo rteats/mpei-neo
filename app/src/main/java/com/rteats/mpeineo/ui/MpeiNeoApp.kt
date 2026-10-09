@@ -18,6 +18,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -67,6 +68,7 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
     val updateViewModel: UpdateViewModel = composeViewModel(
         factory = UpdateViewModel.factory(application.container),
     )
+    val barsState by barsViewModel.state.collectAsState()
     val toolbarScrollBehavior = FloatingToolbarDefaults.exitAlwaysScrollBehavior(
         exitDirection = Bottom,
     )
@@ -113,12 +115,25 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
                     }
                     FloatingDestination(
                         selected = tab == AppTab.BARS,
-                        onSelect = { tab = AppTab.BARS },
+                        onSelect = {
+                            if (tab == AppTab.BARS && barsState.browserVisible) {
+                                barsViewModel.hideBrowser()
+                            } else {
+                                tab = AppTab.BARS
+                            }
+                        },
                     ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_nav_bars),
-                            contentDescription = "БАРС",
-                        )
+                        if (tab == AppTab.BARS && barsState.browserVisible) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Вернуться к оценкам",
+                            )
+                        } else {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_nav_bars),
+                                contentDescription = "БАРС",
+                            )
+                        }
                     }
                     FloatingDestination(
                         selected = tab == AppTab.MAIL,
