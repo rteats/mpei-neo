@@ -43,7 +43,10 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
     var tab by rememberSaveable { mutableStateOf(AppTab.SCHEDULE) }
     val application = LocalContext.current.applicationContext as MpeiNeoApplication
     val barsViewModel: BarsViewModel = composeViewModel(
-        factory = BarsViewModel.factory(application.container.diagnostics),
+        factory = BarsViewModel.factory(
+            application.container.diagnostics,
+            application.container.barsNetworkDiagnostics,
+        ),
     )
     val updateViewModel: UpdateViewModel = composeViewModel(
         factory = UpdateViewModel.factory(application.container),
