@@ -64,6 +64,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
@@ -85,102 +86,85 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun ScheduleScreen(
     state: MainUiState,
     onSelect: (ScheduleTarget) -> Unit,
     onToggleFavorite: (ScheduleTarget) -> Unit,
-    onRefresh: () -> Unit,
-    onPreviousWeek: () -> Unit,
-    onNextWeek: () -> Unit,
-    onCurrentWeek: () -> Unit,
-    onOpenSearch: () -> Unit,
+    onQueryChanged: (String) -> Unit,
+    onTypeChanged: (com.rteats.mpeineo.model.ScheduleTargetType?) -> Unit,
+    onSearch: () -> Unit,
+    onEnsureAgendaWeek: (Int) -> Unit,
+    onRefreshAgendaWeek: (Int) -> Unit,
+    onRetryAgendaWeek: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-    ) {
-        val selected = state.selected
-        if (selected == null) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Card {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Icon(
-                            Icons.Default.DateRange,
-                            contentDescription = null,
-                            modifier = Modifier.size(44.dp),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            "Выберите расписание",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            "Найдите группу, преподавателя или аудиторию и закрепите нужные варианты.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 6.dp, bottom = 16.dp),
-                        )
-                        Button(onClick = onOpenSearch) {
-                            Icon(
-                                Icons.Default.Search,
-                                contentDescription = "Поиск расписания",
+    val searchScrollBehavior =
+        androidx.compose.material3.SearchBarDefaults.enterAlwaysSearchBarScrollBehavior()
+
+    androidx.compose.material3.Scaffold(
+        modifier = modifier.nestedScroll(searchScrollBehavior.nestedScrollConnection),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            ScheduleDockedSearch(
+                state = state,
+                onQueryChanged = onQueryChanged,
+                onTypeChanged = onTypeChanged,
+                onSearch = onSearch,
+                onSelect = onSelect,
+                onToggleFavorite = onToggleFavorite,
+                scrollBehavior = searchScrollBehavior,
+            )
+        },
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+        ) {
+            val selected = state.selected
+            if (selected == null) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Card {
+                        Column(modifier = Modifier.padding(24.dp)) {
+                            Text(
+                                "Выберите расписание",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.SemiBold,
                             )
-                            Spacer(Modifier.size(8.dp))
-                            Text("Открыть поиск")
+                            Text(
+                                "Найдите группу, преподавателя или аудиторию в поиске сверху.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(top = 8.dp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                 }
+            } else {
+                ScheduleTargetSelector(
+                    target = selected,
+                    favorites = state.favorites,
+                    isFavorite = state.favorites.any {
+                        it.id == selected.id && it.type == selected.type
+                    },
+                    source = state.source,
+                    onSelect = onSelect,
+                    onToggleFavorite = { onToggleFavorite(selected) },
+                )
+                ScheduleAgenda(
+                    state = state,
+                    onEnsureWeek = onEnsureAgendaWeek,
+                    onRefreshWeek = onRefreshAgendaWeek,
+                    onRetryWeek = onRetryAgendaWeek,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
             }
-            return
-        }
-
-        ScheduleTargetSelector(
-            target = selected,
-            favorites = state.favorites,
-            isFavorite = state.favorites.any {
-                it.id == selected.id && it.type == selected.type
-            },
-            source = state.source,
-            onSelect = onSelect,
-            onToggleFavorite = { onToggleFavorite(selected) },
-            onOpenSearch = onOpenSearch,
-        )
-
-        if (state.isLoading && state.week == null) {
-            Box(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 28.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                ContainedLoadingIndicator()
-            }
-        }
-
-        state.error?.let { message ->
-            ErrorCard(message = message, onRetry = onRefresh)
-        }
-
-        state.week?.let { week ->
-            WeekContent(
-                week = week,
-                weekOffset = state.weekOffset,
-                isRefreshing = state.isLoading,
-                onRefresh = onRefresh,
-                onPreviousWeek = onPreviousWeek,
-                onNextWeek = onNextWeek,
-                onCurrentWeek = onCurrentWeek,
-            )
         }
     }
 }
@@ -193,7 +177,6 @@ private fun ScheduleTargetSelector(
     source: ScheduleSource?,
     onSelect: (ScheduleTarget) -> Unit,
     onToggleFavorite: () -> Unit,
-    onOpenSearch: () -> Unit,
 ) {
     var expanded by remember(target.id, target.type) { mutableStateOf(false) }
     val density = LocalDensity.current
@@ -257,12 +240,6 @@ private fun ScheduleTargetSelector(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 2.dp),
-                    )
-                }
-                IconButton(onClick = onOpenSearch) {
-                    Icon(
-                        Icons.Default.Search,
-                        contentDescription = "Поиск расписания",
                     )
                 }
                 Text(
@@ -607,7 +584,7 @@ private fun DayPage(
     }
 }
 
-private fun isOneHourBreak(previous: Lesson, next: Lesson): Boolean =
+internal fun isOneHourBreak(previous: Lesson, next: Lesson): Boolean =
     runCatching {
         val end = LocalTime.parse(previous.endTime)
         val start = LocalTime.parse(next.startTime)
@@ -619,7 +596,7 @@ private fun isOneHourBreak(previous: Lesson, next: Lesson): Boolean =
  * overline = time + type, headline = lesson, supporting = room / teacher / group.
  */
 @Composable
-private fun LessonCard(lesson: Lesson) {
+internal fun LessonCard(lesson: Lesson) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
