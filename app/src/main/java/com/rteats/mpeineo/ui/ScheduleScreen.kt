@@ -7,7 +7,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,12 +33,11 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Button
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ContainedLoadingIndicator
@@ -74,6 +72,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.DpOffset
 import com.rteats.mpeineo.model.Lesson
 import com.rteats.mpeineo.model.ScheduleDay
 import com.rteats.mpeineo.model.ScheduleSource
@@ -192,10 +191,12 @@ private fun ScheduleTargetSelector(
                 menuWidth = with(density) { size.width.toDp() }
             },
     ) {
+        // Clickable Card owns its ripple and clips it to the same large shape.
+        // A Modifier.clickable outside the Card would produce a rectangular ripple.
         Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { expanded = true },
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.extraLarge,
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             ),
@@ -225,31 +226,18 @@ private fun ScheduleTargetSelector(
                     "▾",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 2.dp),
+                    modifier = Modifier.padding(horizontal = 4.dp),
                 )
-                BadgedBox(
-                    badge = {
-                        if (favorites.isNotEmpty()) {
-                            Badge {
-                                Text(
-                                    if (favorites.size > 99) "99+" else favorites.size.toString(),
-                                )
-                            }
-                        }
-                    },
+                FilledIconToggleButton(
+                    checked = isFavorite,
+                    onCheckedChange = { onToggleFavorite() },
+                    shapes = IconButtonDefaults.toggleableShapes(),
                 ) {
-                    FilledIconToggleButton(
-                        checked = isFavorite,
-                        onCheckedChange = { onToggleFavorite() },
-                        shapes = IconButtonDefaults.toggleableShapes(),
-                    ) {
-                        Icon(
-                            if (isFavorite) Icons.Default.Star else Icons.Outlined.Star,
-                            contentDescription =
-                                "Избранное: ${favorites.size}. " +
-                                if (isFavorite) "Удалить из избранного" else "Добавить в избранное",
-                        )
-                    }
+                    Icon(
+                        if (isFavorite) Icons.Default.Star else Icons.Outlined.Star,
+                        contentDescription =
+                            if (isFavorite) "Удалить из избранного" else "Добавить в избранное",
+                    )
                 }
             }
         }
@@ -258,35 +246,50 @@ private fun ScheduleTargetSelector(
             expanded = expanded,
             onDismissRequest = { expanded = false },
             modifier = Modifier.width(menuWidth),
+            offset = DpOffset(0.dp, (-4).dp),
+            shape = MaterialTheme.shapes.extraLarge,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
             if (favorites.isEmpty()) {
                 DropdownMenuItem(
                     text = { Text("Нет избранных расписаний") },
                     onClick = {},
+                    shape = MenuDefaults.standaloneItemShape,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
                     enabled = false,
                 )
             } else {
-                favorites.forEach { favorite ->
+                favorites.forEachIndexed { index, favorite ->
                     val current = favorite.id == target.id && favorite.type == target.type
+                    val itemShape = when {
+                        favorites.size == 1 -> MenuDefaults.standaloneItemShape
+                        index == 0 -> MenuDefaults.leadingItemShape
+                        index == favorites.lastIndex -> MenuDefaults.trailingItemShape
+                        else -> MenuDefaults.middleItemShape
+                    }
                     DropdownMenuItem(
                         text = {
-                            Column {
-                                Text(
-                                    favorite.name,
-                                    fontWeight = if (current) FontWeight.Bold else FontWeight.Medium,
-                                )
-                                Text(
-                                    favorite.type.displayName,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
+                            Text(
+                                favorite.name,
+                                fontWeight = if (current) FontWeight.Bold else FontWeight.Medium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
+                        supportingText = {
+                            Text(favorite.type.displayName)
                         },
                         onClick = {
                             expanded = false
                             onSelect(favorite)
                         },
-                        trailingIcon = {
+                        shape = if (current) MenuDefaults.selectedItemShape else itemShape,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                        trailingContent = {
                             if (current) {
                                 Text(
                                     "✓",
