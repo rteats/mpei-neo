@@ -36,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -270,8 +271,7 @@ internal fun BarsScreen(
                                     // Discard callbacks sent by an old page after a redirect.
                                     val currentWebLocation = view.url.orEmpty()
                                     if (
-                                        currentWebLocation.isNotBlank() &&
-                                        isTrustedBarsDocument(currentWebLocation) &&
+                                        !isTrustedBarsDocument(currentWebLocation) ||
                                         safeBarsLocation(page.url) !=
                                             safeBarsLocation(currentWebLocation)
                                     ) {
@@ -663,19 +663,43 @@ private fun BarsNativeDashboard(
 
             state.error?.let { message ->
                 item {
+                    val hasCachedGrades = state.disciplines.isNotEmpty()
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            containerColor = if (hasCachedGrades) {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.errorContainer
+                            },
                         ),
                     ) {
-                        Text(
-                            text = message,
+                        Column(
                             modifier = Modifier.padding(16.dp),
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                        )
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            if (hasCachedGrades) {
+                                Text(
+                                    text = "Не удалось обновить оценки. Показаны сохранённые данные.",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    text = message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            } else {
+                                Text(
+                                    text = message,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                )
+                            }
+                            TextButton(onClick = onRefresh) {
+                                Text("Повторить")
+                            }
+                        }
                     }
                 }
             }
