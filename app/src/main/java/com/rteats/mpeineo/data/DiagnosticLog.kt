@@ -63,7 +63,7 @@ class DiagnosticLog(
     }
 
     private companion object {
-        const val MAX_BYTES = 384L * 1024L
-        const val MAX_LINES = 1_000
+        const val MAX_BYTES = 1024L * 1024L
+        const val MAX_LINES = 4_000
     }
 }
