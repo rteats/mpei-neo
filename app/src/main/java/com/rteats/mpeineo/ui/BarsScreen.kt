@@ -1439,6 +1439,9 @@ private fun ActivityDetailRow(
                 activity.weekNum?.takeIf { it.isNotBlank() }?.let {
                     add("Неделя: $it")
                 }
+                activity.markAndDate?.takeIf { it.isNotBlank() }?.let {
+                    add("Запись БАРС: $it")
+                }
             }
 
             if (details.isNotEmpty()) {
