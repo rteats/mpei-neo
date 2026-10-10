@@ -414,6 +414,7 @@ internal fun ScheduleDockedSearch(
                         }
                     },
                 )
+                    }
                 }
             }
         }
