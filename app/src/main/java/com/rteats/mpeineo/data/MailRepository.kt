@@ -1,5 +1,6 @@
 package com.rteats.mpeineo.data
 
+import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.content.Context
 import android.os.Build
@@ -187,6 +188,9 @@ class MailRepository(private val context: Context) {
             }
         }
 
+    // MediaStore.Downloads was added in Android 10. The runtime SDK check below
+    // executes before that API is accessed; lint cannot infer it from require().
+    @SuppressLint("NewApi")
     suspend fun saveAttachment(
         auth: MailCredentials,
         uid: Long,
