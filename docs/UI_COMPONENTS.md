@@ -68,3 +68,19 @@ session's list in ViewModel memory during tab navigation. OWA remains a
 fallback through the globe action. Native swiping is disabled on the Mail tab
 while email content is shown to avoid conflicts with text selection; narrow
 edge swipes still allow switching destinations.
+
+
+### Internal IMAP TLS certificate handling
+
+`MailTlsTrust` retains Android's standard X.509 trust manager. If MPEI serves
+a certificate signed by its private `public-PUBLICCA-CA`, and Android rejects
+it, the app makes a separate **unauthenticated TLS probe** to display the
+offered leaf certificate's subject, issuer, validity dates, SANs and SHA-256
+fingerprint, plus the last certificate in its chain if available. The user
+must verify the fingerprint through FairEmail or university IT and explicitly
+confirm it; no trust exception is granted automatically. The saved exception
+is only the **exact SHA-256 leaf fingerprint** for `mail.mpei.ru`; all other
+network hosts continue to use system trust. The pinned certificate must
+still be in its validity period and name `mail.mpei.ru`. JavaMail's
+`ssl.checkserveridentity=true` remains enabled. On certificate rotation,
+connections fail closed and require another explicit verification.

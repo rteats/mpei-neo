@@ -106,6 +106,11 @@ class MailCredentialsStore(private val context: Context) {
  */
 class MailRepository(private val context: Context) {
     val credentials = MailCredentialsStore(context)
+    private val tls = MailTlsTrust(context)
+
+    suspend fun inspectServerCertificate(): MailServerCertificate = tls.inspectServer()
+    fun trustCertificate(certificate: MailServerCertificate) = tls.trust(certificate)
+    fun forgetTrustedCertificate() = tls.forget()
 
     private fun <T> withInbox(auth: MailCredentials, action: (IMAPFolder) -> T): T {
         val properties = Properties().apply {
@@ -114,6 +119,10 @@ class MailRepository(private val context: Context) {
             put("mail.imaps.port", "993")
             put("mail.imaps.ssl.enable", "true")
             put("mail.imaps.ssl.checkserveridentity", "true")
+            // Android system trust plus an optional user-approved SHA-256 leaf pin.
+            // Do not use mail.imaps.ssl.trust or bypass hostname validation.
+            put("mail.imaps.ssl.socketFactory", tls.socketFactory())
+            put("mail.imaps.ssl.socketFactory.fallback", "false")
             put("mail.imaps.starttls.enable", "false")
             put("mail.imaps.peek", "true")
             put("mail.imaps.connectiontimeout", "12000")

@@ -8,6 +8,7 @@ import com.rteats.mpeineo.data.MailCredentials
 import com.rteats.mpeineo.data.MailDetail
 import com.rteats.mpeineo.data.MailRepository
 import com.rteats.mpeineo.data.MailSummary
+import com.rteats.mpeineo.data.MailServerCertificate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,6 +17,8 @@ import kotlinx.coroutines.launch
 
 internal data class MailUiState(
     val configured: Boolean = false,
+    val certificate: MailServerCertificate? = null,
+    val inspectingCertificate: Boolean = false,
     val username: String = "",
     val loading: Boolean = false,
     val items: List<MailSummary> = emptyList(),
@@ -35,6 +38,7 @@ internal class MailViewModel(private val repository: MailRepository) : ViewModel
     )
     val state: StateFlow<MailUiState> = _state.asStateFlow()
     private var inMemoryCredentials: MailCredentials? = initialAuth
+    private var attemptedCredentials: MailCredentials? = initialAuth
 
     init { if (initialAuth != null) refresh() }
 
@@ -44,8 +48,9 @@ internal class MailViewModel(private val repository: MailRepository) : ViewModel
             return
         }
         val auth = MailCredentials(username.trim(), password)
+        attemptedCredentials = auth
         viewModelScope.launch {
-            _state.update { it.copy(loading = true, error = null, notice = null) }
+            _state.update { it.copy(loading = true, error = null, notice = null, certificate = null) }
             runCatching {
                 val messages = repository.listInbox(auth)
                 repository.credentials.save(auth)
@@ -53,24 +58,23 @@ internal class MailViewModel(private val repository: MailRepository) : ViewModel
             }.onSuccess { items ->
                 inMemoryCredentials = auth
                 _state.update {
-                    it.copy(configured = true, username = auth.username, items = items, loading = false)
+                    it.copy(configured = true, username = auth.username, items = items, loading = false, certificate = null)
                 }
             }.onFailure { cause ->
-                _state.update { it.copy(loading = false, error = readableError(cause)) }
+                handleConnectionFailure(cause)
             }
         }
     }
 
     fun refresh() {
         val auth = inMemoryCredentials ?: return
+        attemptedCredentials = auth
         if (_state.value.loading) return
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
             runCatching { repository.listInbox(auth) }
                 .onSuccess { items -> _state.update { it.copy(items = items, loading = false) } }
-                .onFailure { cause ->
-                    _state.update { it.copy(loading = false, error = readableError(cause)) }
-                }
+                .onFailure { cause -> handleConnectionFailure(cause) }
         }
     }
 
@@ -117,8 +121,85 @@ internal class MailViewModel(private val repository: MailRepository) : ViewModel
 
     fun logout() {
         repository.credentials.clear()
+        repository.forgetTrustedCertificate()
+        attemptedCredentials = null
         inMemoryCredentials = null
         _state.value = MailUiState()
+    }
+
+    /**
+     * Don't accept trust automatically. The user must independently compare
+     * the SHA-256 fingerprint and explicitly approve the exact certificate.
+     */
+    fun approveCertificate() {
+        val candidate = _state.value.certificate ?: return
+        val auth = attemptedCredentials ?: return
+        viewModelScope.launch {
+            _state.update { it.copy(loading = true, error = null) }
+            runCatching {
+                val live = repository.inspectServerCertificate()
+                require(live.sha256 == candidate.sha256) {
+                    "Сертификат сервера изменился. Проверьте новый отпечаток."
+                }
+                require(live.currentlyValid && live.matchesMailHostname) {
+                    "Сертификат просрочен либо не принадлежит mail.mpei.ru."
+                }
+                repository.trustCertificate(live)
+            }.onSuccess {
+                _state.update { it.copy(loading = false, certificate = null) }
+                if (_state.value.configured) refresh() else login(auth.username, auth.password)
+            }.onFailure { problem ->
+                _state.update {
+                    it.copy(
+                        loading = false,
+                        certificate = null,
+                        error = readableError(problem),
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissCertificateWarning() {
+        _state.update { it.copy(certificate = null, inspectingCertificate = false) }
+    }
+
+    private suspend fun handleConnectionFailure(cause: Throwable) {
+        val descriptions = generateSequence(cause) { it.cause }
+            .take(8).mapNotNull { it.message }.joinToString(" ")
+        val likelyTlsIssue = descriptions.contains("certificate", ignoreCase = true) ||
+            descriptions.contains("PKIX", ignoreCase = true) ||
+            descriptions.contains("SSLHandshake", ignoreCase = true)
+
+        if (!likelyTlsIssue) {
+            _state.update {
+                it.copy(loading = false, inspectingCertificate = false, error = readableError(cause))
+            }
+            return
+        }
+
+        _state.update {
+            it.copy(
+                loading = false,
+                inspectingCertificate = true,
+                certificate = null,
+                error = "Сертификат mail.mpei.ru не доверен. Для подключения проверьте его SHA-256 отпечаток.",
+            )
+        }
+        runCatching { repository.inspectServerCertificate() }
+            .onSuccess { cert ->
+                _state.update {
+                    it.copy(certificate = cert, inspectingCertificate = false)
+                }
+            }
+            .onFailure { failure ->
+                _state.update {
+                    it.copy(
+                        inspectingCertificate = false,
+                        error = "Не удалось получить сертификат: " + readableError(failure),
+                    )
+                }
+            }
     }
 
     private fun readableError(t: Throwable): String {
