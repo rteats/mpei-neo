@@ -93,6 +93,7 @@ import kotlin.math.roundToInt
 @Composable
 internal fun BarsScreen(
     viewModel: BarsViewModel,
+    active: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsState()
@@ -115,7 +116,7 @@ internal fun BarsScreen(
             state.isLoading ||
             !cacheFresh
 
-    BackHandler(enabled = state.browserVisible) {
+    BackHandler(enabled = active && state.browserVisible) {
         val view = webView
         if (view?.canGoBack() == true && view.url != BARS_MARKS_URL) {
             view.goBack()
@@ -147,6 +148,7 @@ internal fun BarsScreen(
 
             BarsAuthStage.AUTHENTICATED -> BarsNativeDashboard(
                 state = state,
+                active = active,
                 onRefresh = {
                     redirectingToMarks = false
                     marksRouteRecoveryAttempted = false
@@ -764,6 +766,7 @@ private fun BarsCheckingState(
 @Composable
 private fun BarsNativeDashboard(
     state: BarsUiState,
+    active: Boolean,
     onRefresh: () -> Unit,
     onOpenBrowser: () -> Unit,
 ) {
@@ -772,7 +775,7 @@ private fun BarsNativeDashboard(
         it.disciplineName == selectedDisciplineName
     }
 
-    BackHandler(enabled = selectedDiscipline != null) {
+    BackHandler(enabled = active && selectedDiscipline != null) {
         selectedDisciplineName = null
     }
     if (selectedDiscipline != null) {
