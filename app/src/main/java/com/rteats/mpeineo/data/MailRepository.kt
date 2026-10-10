@@ -108,8 +108,8 @@ class MailRepository(private val context: Context) {
     val credentials = MailCredentialsStore(context)
     private val tls = MailTlsTrust(context)
 
-    suspend fun inspectServerCertificate(): MailServerCertificate = tls.inspectServer()
-    fun trustCertificate(certificate: MailServerCertificate) = tls.trust(certificate)
+    internal suspend fun inspectServerCertificate(): MailServerCertificate = tls.inspectServer()
+    internal fun trustCertificate(certificate: MailServerCertificate) = tls.trust(certificate)
     fun forgetTrustedCertificate() = tls.forget()
 
     private fun <T> withInbox(auth: MailCredentials, action: (IMAPFolder) -> T): T {
