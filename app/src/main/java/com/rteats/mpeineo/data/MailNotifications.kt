@@ -42,10 +42,8 @@ class MailNotificationPreferences(context: Context) {
         }
 
     @Synchronized
-    fun checkpoint(account: String, messages: List<MailSummary>): List<MailSummary> {
-        if (messages.isEmpty()) return emptyList()
-        val validity = messages.first().uidValidity
-        val highest = messages.maxOf { it.uid }
+    fun checkpoint(account: String, validity: Long, messages: List<MailSummary>): List<MailSummary> {
+        val highest = messages.maxOfOrNull { it.uid } ?: 0L
         val storedAccount = prefs.getString("account", null)
         val storedValidity = prefs.getLong("uid_validity", -1L)
         val lastUid = prefs.getLong("last_uid", -1L)
@@ -163,7 +161,6 @@ object MailNotificationScheduler {
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setContentIntent(pending)
             .setAutoCancel(true)
-            .setOnlyAlertOnce(true)
             .setGroup("mpei_mail")
             .build()
         NotificationManagerCompat.from(context).notify(9821, notification)
@@ -182,11 +179,13 @@ class MailNotificationWorker(
 
         return try {
             // Headers only; READ_ONLY + PEEK does not mark messages as seen.
-            val messages = repository.listInbox(credentials, maxMessages = 60)
+            val snapshot = repository.inboxSnapshot(credentials, maxMessages = 60)
             val stillEnabled = MailNotificationPreferences(applicationContext).enabled
             val stillAccount = repository.credentials.load()?.username == credentials.username
             if (stillEnabled && stillAccount) {
-                val newMessages = prefs.checkpoint(credentials.username, messages)
+                val newMessages = prefs.checkpoint(
+                    credentials.username, snapshot.uidValidity, snapshot.messages,
+                )
                 MailNotificationScheduler.show(applicationContext, newMessages)
             }
             Result.success()
