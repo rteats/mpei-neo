@@ -1565,7 +1565,6 @@ private fun AssessmentTypeChip(
     }
 }
 
-@Composable
 private fun formatBarsGrade(mark: Double): String =
     if (mark % 1.0 == 0.0) mark.toInt().toString() else formatBarsWeightedSum(mark)
 
