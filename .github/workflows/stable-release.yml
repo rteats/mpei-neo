@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - "v*.*.*"
+    branches:
+      - "release/v*.*.*"
   workflow_dispatch:
     inputs:
       version:
@@ -37,6 +39,8 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ inputs.version }}"
+          elif [[ "$GITHUB_REF" == refs/heads/release/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#release/v}"
           else
             VERSION="${GITHUB_REF_NAME#v}"
           fi
