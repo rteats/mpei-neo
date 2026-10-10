@@ -25,6 +25,7 @@ import javax.mail.Multipart
 import javax.mail.Part
 import javax.mail.Session
 import javax.mail.Store
+import javax.mail.UIDFolder
 import javax.mail.internet.InternetAddress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -109,6 +110,7 @@ class MailRepository(private val context: Context) {
     val contextForNotifications: Context get() = context.applicationContext
     val credentials = MailCredentialsStore(context)
     private val tls = MailTlsTrust(context)
+    private val cache = MailCache(context)
 
     internal suspend fun inspectServerCertificate(): MailServerCertificate = tls.inspectServer()
     internal fun trustCertificate(certificate: MailServerCertificate) = tls.trust(certificate)
@@ -179,9 +181,90 @@ class MailRepository(private val context: Context) {
             }
         }
 
+    suspend fun cachedInbox(username: String): List<MailSummary> =
+        withContext(Dispatchers.IO) { cache.inbox(username)?.messages.orEmpty() }
+
+    suspend fun cachedMessage(username: String, uid: Long, validity: Long): MailDetail? =
+        withContext(Dispatchers.IO) { cache.message(username, uid, validity) }
+
+    fun clearCachedMail(username: String) { cache.clear(username) }
+
+    /**
+     * IMAP incremental refresh: reuse cached envelope metadata, fetch only
+     * FLAGS for known UIDs and ENVELOPE for newly arrived UIDs. Deleted mail
+     * drops out of the local index; UIDVALIDITY resets trigger full resync.
+     */
+    suspend fun refreshInbox(auth: MailCredentials, limit: Int = 60): List<MailSummary> =
+        withContext(Dispatchers.IO) {
+            val prior = cache.inbox(auth.username)
+            val snapshot = withInbox(auth) { folder ->
+                val validity = folder.uidValidity
+                if (prior == null || prior.uidValidity != validity ||
+                    folder.uidNext <= 0L || prior.messages.isEmpty()
+                ) {
+                    val total = folder.messageCount
+                    if (total <= 0) return@withInbox MailInboxSnapshot(validity, emptyList())
+                    val messages = folder.getMessages((total - limit + 1).coerceAtLeast(1), total)
+                    val fp = FetchProfile().apply {
+                        add(FetchProfile.Item.ENVELOPE)
+                        add(FetchProfile.Item.FLAGS)
+                        add("Content-Type")
+                    }
+                    folder.fetch(messages, fp)
+                    return@withInbox MailInboxSnapshot(validity, messages.reversed().map { mail ->
+                        summaryFrom(folder, mail, validity)
+                    })
+                }
+
+                val latest = prior.messages.maxOf { it.uid }
+                val nextUid = folder.uidNext
+                val newMessages: Array<Message> =
+                    if (nextUid > latest + 1) {
+                        folder.getMessagesByUID(latest + 1, UIDFolder.LASTUID)
+                    } else emptyArray()
+                val newReal = newMessages.filterNotNull().toTypedArray()
+                if (newReal.isNotEmpty()) {
+                    val fp = FetchProfile().apply {
+                        add(FetchProfile.Item.ENVELOPE)
+                        add(FetchProfile.Item.FLAGS)
+                        add("Content-Type")
+                    }
+                    folder.fetch(newReal, fp)
+                }
+
+                val oldUids = prior.messages.map { it.uid }.toLongArray()
+                val oldMessages = folder.getMessagesByUID(oldUids).filterNotNull().toTypedArray()
+                if (oldMessages.isNotEmpty()) {
+                    folder.fetch(oldMessages, FetchProfile().apply { add(FetchProfile.Item.FLAGS) })
+                }
+                val flags = oldMessages.map { folder.getUID(it) to !it.isSet(Flags.Flag.SEEN) }
+                val incoming = newReal.map { summaryFrom(folder, it, validity) }
+                MailInboxSnapshot(
+                    validity,
+                    mergeMailHeaders(prior.messages, flags, incoming, limit),
+                )
+            }
+            cache.saveInbox(auth.username, snapshot)
+            snapshot.messages
+        }
+
+    private fun summaryFrom(
+        folder: IMAPFolder,
+        mail: Message,
+        validity: Long,
+    ): MailSummary = MailSummary(
+        uid = folder.getUID(mail),
+        uidValidity = validity,
+        sender = sender(mail),
+        subject = mail.subject.orEmpty(),
+        sentAt = (mail.receivedDate ?: mail.sentDate ?: Date()).time,
+        unread = !mail.isSet(Flags.Flag.SEEN),
+        hasAttachment = mail.contentType?.contains("multipart", true) == true,
+    )
+
     suspend fun readMessage(auth: MailCredentials, uid: Long, validity: Long): MailDetail =
         withContext(Dispatchers.IO) {
-            withInbox(auth) { folder ->
+            val detail = withInbox(auth) { folder ->
                 require(folder.uidValidity == validity) { "Папка почты изменилась. Обновите входящие." }
                 val message = folder.getMessageByUID(uid)
                     ?: throw IllegalStateException("Письмо больше не найдено. Обновите входящие.")
@@ -196,6 +279,8 @@ class MailRepository(private val context: Context) {
                     attachments = collector.attachments,
                 )
             }
+            cache.saveMessage(auth.username, uid, validity, detail)
+            detail
         }
 
     suspend fun saveAttachment(
