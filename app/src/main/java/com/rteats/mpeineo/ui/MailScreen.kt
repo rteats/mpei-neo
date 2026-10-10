@@ -2,6 +2,7 @@ package com.rteats.mpeineo.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -68,23 +69,25 @@ import java.util.Date
 @Composable
 internal fun MailScreen(
     viewModel: MailViewModel,
+    webVisible: Boolean,
+    onWebVisibleChange: (Boolean) -> Unit,
+    active: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsState()
-    var showWeb by rememberSaveable { mutableStateOf(false) }
     var showCertificateDetails by remember { mutableStateOf(false) }
 
-    BackHandler(enabled = showWeb || state.selected != null) {
-        if (showWeb) showWeb = false else viewModel.closeMessage()
+    BackHandler(enabled = active && (webVisible || state.selected != null)) {
+        if (webVisible) onWebVisibleChange(false) else viewModel.closeMessage()
     }
 
-    if (showWeb) {
+    if (webVisible) {
         Column(modifier = modifier.fillMaxSize().testTag("mail-webview")) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = { showWeb = false }) {
+                IconButton(onClick = { onWebVisibleChange(false) }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Вернуться к входящим")
                 }
                 Text("OWA", style = MaterialTheme.typography.titleMedium)
@@ -148,7 +151,7 @@ internal fun MailScreen(
                         Icon(Icons.Default.Refresh, contentDescription = "Обновить почту")
                     }
                 }
-                IconButton(onClick = { showWeb = true }) {
+                IconButton(onClick = { onWebVisibleChange(true) }) {
                     Icon(painterResource(R.drawable.ic_mail_open_owa), contentDescription = "Открыть OWA")
                 }
             }
@@ -476,15 +479,17 @@ private fun MailInboxRow(summary: MailSummary, onClick: () -> Unit) {
         },
         leadingContent = {
             Surface(
+                modifier = Modifier.size(48.dp),
                 color = if (summary.unread) MaterialTheme.colorScheme.primaryContainer
                     else MaterialTheme.colorScheme.surfaceContainerHigh,
-                shape = MaterialTheme.shapes.large,
+                shape = CircleShape,
             ) {
-                Text(
-                    summary.sender.take(1).uppercase().ifBlank { "@" },
-                    modifier = Modifier.padding(12.dp),
-                    style = MaterialTheme.typography.titleMedium,
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        summary.sender.take(1).uppercase().ifBlank { "@" },
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
             }
         },
         colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent),

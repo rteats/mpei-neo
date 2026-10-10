@@ -251,7 +251,7 @@ class MailRepository(private val context: Context) {
             part.disposition?.equals(Part.ATTACHMENT, ignoreCase = true) == true
         if (attachment) {
             result.attachments += MailAttachment(
-                name = filename ?: "attachment",
+                name = decodeMailAttachmentName(filename),
                 mimeType = part.contentType.substringBefore(';').ifBlank { "application/octet-stream" },
                 size = part.size,
                 partPath = path,

@@ -53,9 +53,9 @@ private enum class AppTab { SCHEDULE, BARS, MAIL, SETTINGS }
  * AnimatedContent route, Schedule's floating search doesn't shrink its page
  * and cause an animation-size jump.
  *
- * Native pages support full-width horizontal paging. Android WebViews own
- * their horizontal gestures; instead, narrow edge-swipe regions allow page
- * switching without stealing Outlook/BARS website scrolling and text input.
+ * Native pages, including Mail inbox and messages, support full-width horizontal
+ * paging. Embedded WebViews own their gestures; narrow edge-swipe regions
+ * avoid stealing Outlook/BARS website scrolling and text input.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -81,6 +81,7 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
     var currentTab by rememberSaveable { mutableStateOf(AppTab.SCHEDULE) }
     var todayJumpRequest by rememberSaveable { mutableIntStateOf(0) }
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
+    var mailWebVisible by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(pager) {
         snapshotFlow { pager.settledPage }
@@ -103,7 +104,7 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
     val barsIsWeb = barsState.authStage != BarsAuthStage.AUTHENTICATED ||
         barsState.browserVisible
     val nativeSwipeAllowed = !searchExpanded && when (pager.currentPage) {
-        AppTab.MAIL.ordinal -> false
+        AppTab.MAIL.ordinal -> !mailWebVisible
         AppTab.BARS.ordinal -> !barsIsWeb
         else -> true
     }
@@ -195,6 +196,9 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
 
                     AppTab.MAIL -> MailScreen(
                         viewModel = mailViewModel,
+                        webVisible = mailWebVisible,
+                        onWebVisibleChange = { mailWebVisible = it },
+                        active = pager.currentPage == page,
                         modifier = Modifier.fillMaxSize(),
                     )
 
@@ -219,7 +223,7 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
                         modifier = Modifier.fillMaxSize().align(Alignment.BottomCenter),
                     )
                 } else if (
-                    destination == AppTab.MAIL ||
+                    (destination == AppTab.MAIL && mailWebVisible) ||
                     (destination == AppTab.BARS && barsIsWeb)
                 ) {
                     // A WebView isn't a Compose nested-scroll child. Only
