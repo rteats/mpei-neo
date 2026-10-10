@@ -9,10 +9,11 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -37,6 +38,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -46,12 +48,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.rteats.mpeineo.model.ScheduleDay
 import java.time.LocalDate
@@ -88,7 +92,7 @@ internal fun ScheduleAgenda(
     }
     val locale = remember { Locale.forLanguageTag("ru") }
     val weekDateFormat = remember { DateTimeFormatter.ofPattern("d MMM", locale) }
-    val overscrollThreshold = with(LocalDensity.current) { 84.dp.toPx() }
+    val overscrollThreshold = with(LocalDensity.current) { 76.dp.toPx() }
     val overscrollMax = with(LocalDensity.current) { 180.dp.toPx() }
 
     LaunchedEffect(selectedId, selectedType, visibleWeek) {
@@ -102,6 +106,7 @@ internal fun ScheduleAgenda(
         entryDay = currentDayIndex
     }
 
+    key(selectedId, selectedType) {
     AnimatedContent(
         targetState = visibleWeek,
         modifier = modifier.fillMaxSize(),
@@ -151,25 +156,6 @@ internal fun ScheduleAgenda(
                     return Offset.Zero
                 }
 
-                override suspend fun onPostFling(
-                    consumed: Velocity,
-                    available: Velocity,
-                ): Velocity {
-                    if (displayedWeek == visibleWeek) {
-                        when {
-                            overscroll >= overscrollThreshold -> {
-                                entryDay = 6 // previous week lands on Sunday
-                                visibleWeek = displayedWeek - 1
-                            }
-                            overscroll <= -overscrollThreshold -> {
-                                entryDay = 0 // next week begins on Monday
-                                visibleWeek = displayedWeek + 1
-                            }
-                        }
-                    }
-                    overscroll = 0f
-                    return Velocity.Zero
-                }
             }
         }
 
@@ -191,8 +177,50 @@ internal fun ScheduleAgenda(
                     Icon(Icons.Default.Refresh, contentDescription = "Обновить эту неделю")
                 }
             }
-            Box(modifier = Modifier.weight(1f).fillMaxWidth()
-                .nestedScroll(overscrollConnection)) {
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth()
+                    .nestedScroll(overscrollConnection)
+                    .pointerInput(displayedWeek, selectedId, selectedType) {
+                        // Watch the pointer stream without consuming scroll events.
+                        // Unlike onPostFling, UP is delivered even after a slow
+                        // pull or when a teacher has an almost-empty week.
+                        awaitEachGesture {
+                            awaitFirstDown(
+                                requireUnconsumed = false,
+                                pass = PointerEventPass.Initial,
+                            )
+                            var edgePull = 0f
+                            do {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                event.changes.forEach { change ->
+                                    if (!change.pressed) return@forEach
+                                    val deltaY = change.position.y - change.previousPosition.y
+                                    if (deltaY > 0f && !listState.canScrollBackward) {
+                                        edgePull = (edgePull + deltaY).coerceAtLeast(0f)
+                                    } else if (deltaY < 0f && !listState.canScrollForward) {
+                                        edgePull = (edgePull + deltaY).coerceAtMost(0f)
+                                    } else {
+                                        edgePull = 0f
+                                    }
+                                }
+                            } while (event.changes.any { it.pressed })
+
+                            if (displayedWeek == visibleWeek) {
+                                when {
+                                    edgePull >= overscrollThreshold -> {
+                                        entryDay = 6
+                                        visibleWeek = displayedWeek - 1
+                                    }
+                                    edgePull <= -overscrollThreshold -> {
+                                        entryDay = 0
+                                        visibleWeek = displayedWeek + 1
+                                    }
+                                }
+                            }
+                            overscroll = 0f
+                        }
+                    },
+            ) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize()
                         .graphicsLayer { translationY = overscroll * 0.22f },
@@ -250,6 +278,7 @@ internal fun ScheduleAgenda(
                 }
             }
         }
+    }
     }
 }
 
@@ -309,8 +338,8 @@ private fun AgendaDaySection(
 }
 
 /**
- * One rounded container per day. The accent stays in the title and outline,
- * so lesson-specific tonal fills maintain contrast in both light and dark themes.
+ * Muted Monet-derived tonality for today, without an accent outline.
+ * Keep lesson type backgrounds unchanged and all text onSurface for contrast.
  */
 @Composable
 private fun AgendaDayCard(
@@ -325,10 +354,11 @@ private fun AgendaDayCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = if (isToday) BorderStroke(
-            1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
-        ) else null,
+        color = if (isToday) lerp(
+            MaterialTheme.colorScheme.surfaceContainerLow,
+            MaterialTheme.colorScheme.primaryContainer,
+            0.18f,
+        ) else MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Column(
             modifier = Modifier.padding(10.dp),
@@ -359,10 +389,12 @@ private fun AgendaDayHeader(
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
-        color = if (isToday) MaterialTheme.colorScheme.primaryContainer
-            else MaterialTheme.colorScheme.surfaceContainer,
-        contentColor = if (isToday) MaterialTheme.colorScheme.onPrimaryContainer
-            else MaterialTheme.colorScheme.onSurface,
+        color = if (isToday) lerp(
+            MaterialTheme.colorScheme.surfaceContainer,
+            MaterialTheme.colorScheme.primaryContainer,
+            0.27f,
+        ) else MaterialTheme.colorScheme.surfaceContainer,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         Text(
             date.format(dateFormat).replaceFirstChar { it.titlecase(language) } +
