@@ -10,6 +10,8 @@ import com.rteats.mpeineo.data.MailRepository
 import com.rteats.mpeineo.data.MailNotificationScheduler
 import com.rteats.mpeineo.data.MailSummary
 import com.rteats.mpeineo.data.MailServerCertificate
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,7 +43,17 @@ internal class MailViewModel(private val repository: MailRepository) : ViewModel
     private var inMemoryCredentials: MailCredentials? = initialAuth
     private var attemptedCredentials: MailCredentials? = initialAuth
 
-    init { if (initialAuth != null) refresh() }
+    init {
+        if (initialAuth != null) {
+            viewModelScope.launch {
+                val cached = repository.cachedInbox(initialAuth.username)
+                if (inMemoryCredentials?.username == initialAuth.username && cached.isNotEmpty()) {
+                    _state.update { it.copy(items = cached) }
+                }
+                refresh()
+            }
+        }
+    }
 
     fun login(username: String, password: String) {
         if (username.isBlank() || password.isBlank()) {
@@ -53,7 +65,7 @@ internal class MailViewModel(private val repository: MailRepository) : ViewModel
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null, notice = null, certificate = null) }
             runCatching {
-                val messages = repository.listInbox(auth)
+                val messages = repository.refreshInbox(auth)
                 repository.credentials.save(auth)
                 messages
             }.onSuccess { items ->
@@ -73,7 +85,7 @@ internal class MailViewModel(private val repository: MailRepository) : ViewModel
         if (_state.value.loading) return
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
-            runCatching { repository.listInbox(auth) }
+            runCatching { repository.refreshInbox(auth) }
                 .onSuccess { items -> _state.update { it.copy(items = items, loading = false) } }
                 .onFailure { cause -> handleConnectionFailure(cause) }
         }
@@ -85,6 +97,16 @@ internal class MailViewModel(private val repository: MailRepository) : ViewModel
             it.copy(selected = summary, message = null, loadingMessage = true, error = null, notice = null)
         }
         viewModelScope.launch {
+            val cached = repository.cachedMessage(auth.username, summary.uid, summary.uidValidity)
+            if (cached != null) {
+                _state.update { current ->
+                    if (current.selected?.uid == summary.uid &&
+                        current.selected?.uidValidity == summary.uidValidity
+                    ) current.copy(message = cached, loadingMessage = false)
+                    else current
+                }
+                return@launch
+            }
             runCatching { repository.readMessage(auth, summary.uid, summary.uidValidity) }
                 .onSuccess { body ->
                     _state.update { current ->
@@ -122,6 +144,7 @@ internal class MailViewModel(private val repository: MailRepository) : ViewModel
 
     fun logout() {
         MailNotificationScheduler.stopAndClear(repository.contextForNotifications)
+        inMemoryCredentials?.username?.let(repository::clearCachedMail)
         repository.credentials.clear()
         repository.forgetTrustedCertificate()
         attemptedCredentials = null
