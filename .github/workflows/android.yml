@@ -55,7 +55,7 @@ jobs:
 
       - name: Build signed dev APK
         run: |
-          gradle --no-daemon assembleDevRelease             -PVERSION_CODE=${{ github.run_number }}             -PVERSION_NAME=${DEV_BASE_VERSION}-dev.${{ github.run_number }}
+          gradle --no-daemon testDevDebugUnitTest assembleDevRelease             -PVERSION_CODE=${{ github.run_number }}             -PVERSION_NAME=${DEV_BASE_VERSION}-dev.${{ github.run_number }}
           cp app/build/outputs/apk/dev/release/app-dev-release.apk MPEI-Neo-Dev.apk
 
       - name: Upload dev artifact
