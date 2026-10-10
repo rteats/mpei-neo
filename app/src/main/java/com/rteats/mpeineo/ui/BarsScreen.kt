@@ -37,6 +37,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -808,13 +809,15 @@ private fun BarsNativeDashboard(
         it.disciplineName == selectedDisciplineName
     }
 
-    BackHandler(enabled = active && selectedDiscipline != null) {
-        selectedDisciplineName = null
-    }
+    // Expansion happens inside the BARS tab, rather than navigating to
+    // a separate screen. The pinned discipline header is the only collapse
+    // control; app-level horizontal paging continues to work.
+    val dashboardListState = rememberLazyListState()
     if (selectedDiscipline != null) {
-        DisciplineDetailsPage(
+        DisciplineExpandedCard(
             discipline = selectedDiscipline,
-            onBack = { selectedDisciplineName = null },
+            onCollapse = { selectedDisciplineName = null },
+            onOpenBrowser = onOpenBrowser,
         )
         return
     }
@@ -834,6 +837,7 @@ private fun BarsNativeDashboard(
         modifier = Modifier.fillMaxSize(),
     ) {
         LazyColumn(
+            state = dashboardListState,
             modifier = Modifier.fillMaxSize(),
         ) {
             item {
@@ -1146,95 +1150,113 @@ private fun DisciplineCard(
     }
 }
 
+/**
+ * Expanded discipline remains an in-place BARS card, not a navigation
+ * destination. Its title stays pinned and collapses the card on tap.
+ * Content can scroll within the card, without reaching other disciplines.
+ */
 @Composable
-private fun DisciplineDetailsPage(
+private fun DisciplineExpandedCard(
     discipline: BarsDiscipline,
-    onBack: () -> Unit,
+    onCollapse: () -> Unit,
+    onOpenBrowser: () -> Unit,
 ) {
     val controls = discipline.activities.filter {
         it.type == BarsActivityType.CONTROL_ACTIVITY
     }
-    val finalGrades = discipline.activities.filter {
-        it.type != BarsActivityType.CONTROL_ACTIVITY &&
-            it.type != BarsActivityType.UNDEFINED &&
-            it.markValue != null
+    val otherActivities = discipline.activities.filter {
+        it.type != BarsActivityType.CONTROL_ACTIVITY
     }
-
     Column(
         modifier = Modifier.fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .testTag("bars-discipline-details"),
+            .padding(horizontal = 8.dp)
+            .testTag("bars-discipline-expanded"),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(
+        // Same card header expands and collapses the discipline in-place.
+        Surface(
+            onClick = onCollapse,
             modifier = Modifier.fillMaxWidth()
-                .padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                .padding(top = 8.dp),
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         ) {
-            IconButton(onClick = onBack) {
+            Row(
+                modifier = Modifier.fillMaxWidth()
+                    .padding(horizontal = 18.dp, vertical = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    discipline.disciplineName,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Назад к дисциплинам",
+                    Icons.Default.KeyboardArrowUp,
+                    contentDescription = "Свернуть дисциплину",
                 )
             }
-            Text(
-                "Дисциплина",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
         }
 
         Column(
             modifier = Modifier.fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                color = MaterialTheme.colorScheme.surfaceContainer,
             ) {
                 Column(
-                    modifier = Modifier.padding(22.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text(
-                        discipline.disciplineName,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                    )
                     if (discipline.assessmentType.isNotBlank()) {
                         AssessmentTypeChip(discipline.assessmentType)
                     }
                     if (discipline.personName.isNotBlank()) {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(
-                                "ПРЕПОДАВАТЕЛЬ",
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                            Text(
-                                discipline.personName,
-                                style = MaterialTheme.typography.bodyLarge,
-                            )
+                        Text(
+                            discipline.personName,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        discipline.finalMarkValue?.let {
+                            GradeChip("Итог: ${formatBarsGrade(it.toDouble())}", it)
+                        }
+                        discipline.currentScoreValue?.let {
+                            GradeChip("Текущий: ${formatBarsGrade(it.toDouble())}", it)
                         }
                     }
-                    val lastMark = discipline.finalMarkValue
-                    val current = discipline.currentScoreValue
-                    if (lastMark != null || current != null) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            lastMark?.let {
-                                GradeChip("Итог: ${it.roundToInt()}", it)
-                            }
-                            current?.let {
-                                GradeChip("Текущий: ${it.roundToInt()}", it)
-                            }
-                        }
-                    }
+                    Text(
+                        "Оценено: ${controls.count { it.markValue != null }} / ${controls.size}" +
+                            if (controls.any { it.weekNum?.isNotBlank() == true }) {
+                                "  ·  Сроки указаны в контрольных мероприятиях"
+                            } else "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.extraLarge,
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    GradeForecastSection(discipline)
                 }
             }
 
@@ -1248,39 +1270,26 @@ private fun DisciplineDetailsPage(
                         "Контрольные мероприятия",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(bottom = 8.dp),
                     )
                     if (controls.isEmpty()) {
                         Text(
                             "Контрольных мероприятий нет",
+                            modifier = Modifier.padding(top = 10.dp),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
                         controls.forEachIndexed { index, activity ->
                             ActivityDetailRow(activity)
-                            if (index < controls.lastIndex) {
-                                HorizontalDivider(
-                                    color = MaterialTheme.colorScheme.outlineVariant,
-                                )
-                            }
+                            if (index < controls.lastIndex) HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                            )
                         }
                     }
                 }
             }
 
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-            ) {
-                // Forecast is an expandable section, not a separate tab.
-                Column(modifier = Modifier.padding(14.dp)) {
-                    GradeForecastDropdown(discipline)
-                }
-            }
-
-            if (finalGrades.isNotEmpty()) {
+            if (otherActivities.isNotEmpty()) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.extraLarge,
@@ -1288,181 +1297,112 @@ private fun DisciplineDetailsPage(
                 ) {
                     Column(modifier = Modifier.padding(18.dp)) {
                         Text(
-                            "Итоговые оценки",
+                            "Другие данные БАРС",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(bottom = 8.dp),
                         )
-                        finalGrades.forEachIndexed { index, activity ->
-                            FinalGradeRow(activity)
-                            if (index < finalGrades.lastIndex) HorizontalDivider()
+                        otherActivities.forEachIndexed { index, activity ->
+                            ActivityDetailRow(activity)
+                            if (index < otherActivities.lastIndex) HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                            )
                         }
                     }
                 }
             }
+
+            FilledTonalButton(
+                onClick = onOpenBrowser,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Открыть в БАРС")
+                Spacer(Modifier.size(6.dp))
+                Icon(Icons.Default.ArrowForward, contentDescription = null)
+            }
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
 
-/**
- * Every discipline has a collapsible calculator in its details sheet.
- * All input comes from BARS control rows and their explicit weights.
- */
+/** Compact automatic-grade preview: existing grades, missing slots, minimal combinations. */
 @Composable
-private fun GradeForecastDropdown(
+private fun GradeForecastSection(
     discipline: BarsDiscipline,
     modifier: Modifier = Modifier,
 ) {
-    var expanded by rememberSaveable(discipline.disciplineName) { mutableStateOf(false) }
-    val result = remember(discipline) { calculateGradeForecast(discipline) }
-
-    Column(modifier = modifier.fillMaxWidth()) {
-        Surface(
-            onClick = { expanded = !expanded },
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            shape = MaterialTheme.shapes.large,
-        ) {
+    val forecast = remember(discipline) { calculateGradeForecast(discipline) }
+    val controls = discipline.activities.filter {
+        it.type == BarsActivityType.CONTROL_ACTIVITY
+    }
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            "Автомат",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        if (controls.isNotEmpty()) {
             Row(
                 modifier = Modifier.fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    .horizontalScroll(rememberScrollState())
+                    .padding(vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    "Калькулятор оценок · ≥ 4,2",
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-                Icon(
-                    if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
+                controls.forEach { activity ->
+                    val grade = activity.markValue
+                    if (grade != null) {
+                        GradeChip(formatBarsGrade(grade.toDouble()), grade)
+                    } else {
+                        NeutralChip("—")
+                    }
+                }
             }
         }
-        AnimatedVisibility(visible = expanded) {
-            Column(
-                modifier = Modifier.padding(top = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                when (result) {
-                    is GradeForecast.Unavailable -> {
-                        Text(
-                            result.explanation,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                    is GradeForecast.Available -> {
-                        Text(
-                            "Учтено из БАРС: ${formatBarsWeightedSum(result.currentSum)}  ·  " +
-                                "Σ весов: ${formatBarsWeightedSum(result.totalWeight)}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        if (result.completed.isNotEmpty()) {
-                            Text(
-                                "Уже выставлены (не изменяются):",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                result.completed.forEach { slot ->
-                                    slot.currentMark?.let { mark ->
-                                        GradeChip(
-                                            text = "${slot.name}: ${formatBarsGrade(mark)}",
-                                            mark = mark.toFloat(),
-                                        )
-                                    }
+        when (forecast) {
+            is GradeForecast.Unavailable -> {
+                Text(
+                    "Недостаточно данных",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            is GradeForecast.Available -> {
+                if (forecast.combinations.isEmpty()) {
+                    Text(
+                        "Недостижимо",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else if (forecast.remaining.isNotEmpty()) {
+                    Spacer(Modifier.height(2.dp))
+                    forecast.combinations.forEach { combination ->
+                        var upcomingIndex = 0
+                        Row(
+                            modifier = Modifier.fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(vertical = 3.dp),
+                            horizontalArrangement = Arrangement.spacedBy(7.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            controls.forEach { activity ->
+                                val existing = activity.markValue
+                                val value = when {
+                                    existing != null -> existing
+                                    parseBarsWeight(activity.weight)?.let { it > 0.0 } == true &&
+                                        upcomingIndex < combination.marks.size ->
+                                        combination.marks[upcomingIndex++].toFloat()
+                                    else -> null
+                                }
+                                if (value != null) {
+                                    GradeChip(formatBarsGrade(value.toDouble()), value)
+                                } else {
+                                    NeutralChip("—")
                                 }
                             }
                         }
-                        if (result.totalWeight < 0.999) {
-                            Text(
-                                "Сумма известных весов меньше 1. Учитываются только " +
-                                    "отображаемые в БАРС мероприятия; неуказанные веса " +
-                                    "и экзамен отдельно не предполагаются.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        if (result.combinations.isEmpty()) {
-                            Text(
-                                "С указанными весами порог 4,2 недостижим, " +
-                                    "даже если за оставшиеся мероприятия получить 5.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                        } else if (result.remaining.isEmpty()) {
-                            Text(
-                                "Порог уже достигнут: " +
-                                    formatBarsWeightedSum(result.currentSum) +
-                                    " ≥ 4,2. Будущих оценок с известным весом нет.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        } else {
-                            Text(
-                                "Минимально необходимые оценки (3–5):",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            Text(
-                                "Порядок: " + result.remaining.joinToString(" → ") { it.name },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            result.combinations.forEach { combination ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth()
-                                        .padding(horizontal = 4.dp, vertical = 5.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Row(
-                                        modifier = Modifier.weight(1f)
-                                            .horizontalScroll(rememberScrollState()),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        combination.marks.forEach { grade ->
-                                            GradeChip(
-                                                text = grade.toString(),
-                                                mark = grade.toFloat(),
-                                            )
-                                        }
-                                    }
-                                    Text(
-                                        "= " + formatBarsWeightedSum(combination.weightedSum),
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
-                                }
-                            }
-                            if (result.truncated) {
-                                Text(
-                                    "Показаны только наиболее экономные варианты.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                        Text(
-                            "Учитываются существующие оценки и веса КМ. " +
-                                "Показан наименьший достижимый итог ≥ 4,2; " +
-                                "при равенстве предпочтительны более низкие оценки. " +
-                                "Он не изменяет оценки БАРС и не учитывает " +
-                                "правила выставления итоговой оценки преподавателем.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                     }
                 }
             }
