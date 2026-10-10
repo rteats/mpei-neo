@@ -18,10 +18,6 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -49,6 +45,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import com.rteats.mpeineo.R
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -119,7 +117,7 @@ internal fun MailScreen(
                     }
                 }
                 IconButton(onClick = { showWeb = true }) {
-                    Icon(Icons.Default.Language, contentDescription = "Открыть OWA")
+                    Icon(painterResource(R.drawable.ic_mail_open_owa), contentDescription = "Открыть OWA")
                 }
             }
         },
@@ -181,7 +179,7 @@ internal fun MailScreen(
                                     )
                                     TextButton(onClick = viewModel::logout) {
                                         Icon(
-                                            Icons.Default.Logout,
+                                            painterResource(R.drawable.ic_mail_logout),
                                             contentDescription = null,
                                             modifier = Modifier.size(16.dp),
                                         )
@@ -372,7 +370,7 @@ private fun MailMessage(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(Icons.Default.AttachFile, contentDescription = null)
+                            Icon(painterResource(R.drawable.ic_mail_attachment), contentDescription = null)
                             Text(
                                 attachment.name,
                                 modifier = Modifier.weight(1f),
@@ -382,7 +380,7 @@ private fun MailMessage(
                             if (state.savingAttachment == attachment.partPath) {
                                 CircularProgressIndicator(modifier = Modifier.size(20.dp))
                             } else Icon(
-                                Icons.Default.Download,
+                                painterResource(R.drawable.ic_mail_download),
                                 contentDescription = "Сохранить в Загрузки",
                             )
                         }

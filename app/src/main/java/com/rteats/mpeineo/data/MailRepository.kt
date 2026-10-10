@@ -145,7 +145,7 @@ class MailRepository(private val context: Context) {
                     add("Content-Disposition")
                 }
                 folder.fetch(messages, fp)
-                messages.asReversed().map { message ->
+                messages.reversed().map { message ->
                     MailSummary(
                         uid = folder.getUID(message),
                         uidValidity = folder.uidValidity,
