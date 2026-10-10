@@ -18,7 +18,6 @@ import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
@@ -124,6 +123,16 @@ internal fun ScheduleDockedSearch(
         scope.launch { searchBarState.animateToCollapsed() }
     }
 
+    // Dismissing search (including Android's Back gesture) restores the active
+    // schedule name instead of leaving a stale query in the collapsed field.
+    LaunchedEffect(searchBarState.currentValue) {
+        if (searchBarState.currentValue == SearchBarValue.Collapsed &&
+            textFieldState.text.isNotEmpty()
+        ) {
+            textFieldState.setTextAndPlaceCursorAtEnd("")
+        }
+    }
+
     val inputField: @Composable () -> Unit = {
         SearchBarDefaults.InputField(
             textFieldState = textFieldState,
@@ -158,10 +167,25 @@ internal fun ScheduleDockedSearch(
                 }
             },
             trailingIcon = {
+                val selected = state.selected
                 if (searchBarState.currentValue == SearchBarValue.Collapsed &&
-                    state.selected != null
+                    selected != null
                 ) {
-                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = null)
+                    val isFavorite = state.favorites.any {
+                        it.favoriteKey() == selected.favoriteKey()
+                    }
+                    FilledIconToggleButton(
+                        checked = isFavorite,
+                        onCheckedChange = { onToggleFavorite(selected) },
+                        shapes = IconButtonDefaults.toggleableShapes(),
+                    ) {
+                        Icon(
+                            if (isFavorite) Icons.Default.Star else Icons.Outlined.Star,
+                            contentDescription = if (isFavorite) {
+                                "Удалить выбранное расписание из избранного"
+                            } else "Добавить выбранное расписание в избранное",
+                        )
+                    }
                 }
             },
         )
@@ -176,7 +200,7 @@ internal fun ScheduleDockedSearch(
                         background,
                         background.copy(alpha = 0.94f),
                         background.copy(alpha = 0.68f),
-                        MaterialTheme.colorScheme.shadow.copy(alpha = 0.06f),
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
                         Color.Transparent,
                     ),
                 ),
