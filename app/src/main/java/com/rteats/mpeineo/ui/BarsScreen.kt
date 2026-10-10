@@ -98,6 +98,7 @@ internal fun BarsScreen(
 ) {
     val state by viewModel.state.collectAsState()
     var webView by remember { mutableStateOf<WebView?>(null) }
+    var retryNavigation by remember { mutableStateOf<(() -> Unit)?>(null) }
     var redirectingToMarks by remember { mutableStateOf(false) }
     var marksExtractionStarted by remember { mutableStateOf(false) }
     var needsFullViewport by remember { mutableStateOf(true) }
@@ -110,11 +111,17 @@ internal fun BarsScreen(
     var mainFrameRetryCount by remember { mutableStateOf(0) }
 
     val cacheFresh = state.hasFreshCache()
-    val shouldHaveWebView =
-        state.authStage != BarsAuthStage.AUTHENTICATED ||
+    // A pager may precompose and immediately discard an off-screen BARS page.
+    // Only establish a connection while its tab is settled/visible. Once loaded,
+    // retain the same WebView for the entire visible BARS session, even when the
+    // extracted grades are cached, instead of destroying it after extraction.
+    val shouldHaveWebView = active && (
+        webView != null ||
+            state.authStage != BarsAuthStage.AUTHENTICATED ||
             state.browserVisible ||
             state.isLoading ||
             !cacheFresh
+        )
 
     BackHandler(enabled = active && state.browserVisible) {
         val view = webView
@@ -137,8 +144,11 @@ internal fun BarsScreen(
                 onRetry = {
                     marksRouteRecoveryAttempted = false
                     marksFailureReported = false
+                    mainFrameRetryCount = 0
+                    mainFrameFailed = false
+                    needsFullViewport = true
                     viewModel.checking()
-                    webView?.loadUrl(BARS_LOGIN_URL)
+                    retryNavigation?.invoke()
                 },
             )
 
@@ -153,8 +163,11 @@ internal fun BarsScreen(
                     redirectingToMarks = false
                     marksRouteRecoveryAttempted = false
                     marksFailureReported = false
+                    mainFrameRetryCount = 0
+                    mainFrameFailed = false
+                    needsFullViewport = true
                     viewModel.startRefresh()
-                    webView?.loadUrl(BARS_LOGIN_URL)
+                    retryNavigation?.invoke()
                 },
                 onOpenBrowser = viewModel::showBrowser,
             )
@@ -275,7 +288,8 @@ internal fun BarsScreen(
                                 } else if (!state.browserVisible) {
                                     needsFullViewport = false
                                     viewModel.extractionFailed(
-                                        "БАРС не отвечает. Проверьте сеть и нажмите «Повторить».",
+                                        "Тайм-аут подключения к БАРС. Сессия не сброшена. " +
+                                            "Проверьте bars.mpei.ru в браузере или попробуйте другую сеть.",
                                     )
                                 }
                             },
@@ -283,10 +297,23 @@ internal fun BarsScreen(
                         )
                     }
 
+                    // The Retry action must use this same timeout-protected
+                    // navigation path rather than calling WebView.loadUrl directly.
+                    retryNavigation = {
+                        if (webView === view) {
+                            loadBarsWithWatchdog(
+                                targetUrl = BARS_LOGIN_URL,
+                                reason = "manual retry",
+                                fallbackUrl = null,
+                            )
+                        }
+                    }
+
                     view.addJavascriptInterface(
                         BarsJavascriptBridge(
                             onPageState = { json ->
                                 view.post {
+                                    if (webView !== view) return@post
                                     val page = runCatching {
                                         BarsPayloadParser.parsePageState(json)
                                     }.getOrElse { error ->
@@ -448,6 +475,7 @@ internal fun BarsScreen(
                             },
                             onData = { json ->
                                 view.post {
+                                    if (webView !== view) return@post
                                     needsFullViewport = false
                                     marksRouteRecoveryAttempted = false
                                     marksFailureReported = false
@@ -458,6 +486,7 @@ internal fun BarsScreen(
                             },
                             onError = { message ->
                                 view.post {
+                                    if (webView !== view) return@post
                                     needsFullViewport = false
                                     viewModel.logWebEvent("javascript error=$message")
                                     viewModel.extractionFailed(message)
@@ -507,6 +536,7 @@ internal fun BarsScreen(
                             url: String,
                             favicon: Bitmap?,
                         ) {
+                            if (webView !== view) return
                             marksExtractionStarted = false
                             marksMissingPolls = 0
                             marksWaitLogged = false
@@ -524,6 +554,7 @@ internal fun BarsScreen(
                         }
 
                         override fun onPageFinished(view: WebView, url: String) {
+                            if (webView !== view) return
                             viewModel.updateSessionUrl(url)
                             viewModel.logWebEvent(
                                 "page finished id=$programmaticRequestToken " +
@@ -599,6 +630,7 @@ internal fun BarsScreen(
                             request: WebResourceRequest,
                             error: WebResourceError,
                         ) {
+                            if (webView !== view) return
                             if (!request.isForMainFrame) {
                                 if (subresourceErrorCount++ < 5) {
                                     viewModel.logWebEvent(
@@ -630,16 +662,10 @@ internal fun BarsScreen(
 
                             if (canRetry) {
                                 mainFrameRetryCount += 1
-                                val retryUrl =
-                                    if (
-                                        hasBarsCookies &&
-                                        safeBarsLocation(failedUrl) ==
-                                            safeBarsLocation(BARS_LOGIN_URL)
-                                    ) {
-                                        BARS_MARKS_URL
-                                    } else {
-                                        failedUrl
-                                    }
+                                // Network timeouts are not evidence of an expired
+                                // cookie. Retry the same page, never jump to the
+                                // marks route based on cookie presence alone.
+                                val retryUrl = failedUrl
 
                                 viewModel.logWebEvent(
                                     "retrying BARS main frame in 1500ms target=${safeBarsLocation(retryUrl)}",
@@ -666,7 +692,12 @@ internal fun BarsScreen(
                             if (!state.browserVisible) {
                                 needsFullViewport = false
                                 viewModel.extractionFailed(
-                                    "Не удалось открыть БАРС: ${error.description}. Нажмите «Повторить».",
+                                    if (error.errorCode == WebViewClient.ERROR_TIMEOUT) {
+                                        "Сервер БАРС не ответил (тайм-аут сети). " +
+                                            "Сессия сохранена. Попробуйте Wi-Fi или откройте сайт в браузере."
+                                    } else {
+                                        "Не удалось открыть БАРС: ${error.description}. Нажмите «Повторить»."
+                                    },
                                 )
                             }
                         }
@@ -693,15 +724,15 @@ internal fun BarsScreen(
                         }
                     }
 
-                    val initialFallback =
-                        if (hasBarsCookies) BARS_MARKS_URL else null
+                    // A cookie may be stale, and a timed-out root URL
+                    // cannot be repaired by requesting a second protected route.
                     viewModel.logWebEvent(
                         "initial load path=${safeBarsLocation(BARS_LOGIN_URL)}",
                     )
                     loadBarsWithWatchdog(
                         targetUrl = BARS_LOGIN_URL,
                         reason = "initial session check",
-                        fallbackUrl = initialFallback,
+                        fallbackUrl = null,
                     )
                 }
             },
@@ -714,6 +745,7 @@ internal fun BarsScreen(
                             "cacheFresh=${state.hasFreshCache()} loading=${state.isLoading} " +
                             "path=${safeBarsLocation(view.url.orEmpty())} progress=${view.progress}",
                     )
+                    if (webView === view) retryNavigation = null
                     view.stopLoading()
                     view.removeJavascriptInterface(BARS_JS_INTERFACE)
                     view.webViewClient = WebViewClient()

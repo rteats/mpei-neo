@@ -191,7 +191,7 @@ fun MpeiNeoApp(viewModel: MainViewModel, initialMailTab: Boolean = false) {
 
                     AppTab.BARS -> BarsScreen(
                         viewModel = barsViewModel,
-                        active = pager.currentPage == page,
+                        active = pager.settledPage == page,
                         modifier = Modifier.fillMaxSize(),
                     )
 
