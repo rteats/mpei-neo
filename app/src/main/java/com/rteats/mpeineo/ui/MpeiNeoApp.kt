@@ -188,6 +188,7 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
 
                     AppTab.BARS -> BarsScreen(
                         viewModel = barsViewModel,
+                        active = pager.currentPage == page,
                         modifier = Modifier.fillMaxSize(),
                     )
 
