@@ -1,6 +1,7 @@
 package com.rteats.mpeineo.data
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -82,9 +83,15 @@ object MailNotificationScheduler {
 
     fun setEnabled(context: Context, value: Boolean) {
         val prefs = MailNotificationPreferences(context)
-        prefs.enabled = value
-        if (value) schedule(context)
-        else WorkManager.getInstance(context).cancelUniqueWork(UNIQUE_WORK)
+        if (value) {
+            prefs.enabled = true
+            schedule(context)
+        } else {
+            // Re-enabling must baseline from the current mailbox rather than
+            // notifying for all messages received while notifications were off.
+            prefs.clearAccount()
+            WorkManager.getInstance(context).cancelUniqueWork(UNIQUE_WORK)
+        }
     }
 
     fun changeInterval(context: Context, intervalMinutes: Int) {
@@ -133,7 +140,7 @@ object MailNotificationScheduler {
         }
     }
 
-    @Suppress("MissingPermission")
+    @SuppressLint("MissingPermission")
     internal fun show(context: Context, newMessages: List<MailSummary>) {
         if (newMessages.isEmpty() || !canNotify(context)) return
         ensureChannel(context)
