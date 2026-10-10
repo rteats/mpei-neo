@@ -28,6 +28,7 @@ internal data class BarsUiState(
     val profileName: String = "",
     val profileGroup: String = "",
     val semester: String = "",
+    val studentDetails: List<BarsStudentDetail> = emptyList(),
     val disciplines: List<BarsDiscipline> = emptyList(),
     val isLoading: Boolean = true,
     val browserVisible: Boolean = false,
@@ -136,10 +137,16 @@ internal data class BarsControlScheduleItem(
     val markAndDate: String,
 )
 
+internal data class BarsStudentDetail(
+    val label: String = "",
+    val value: String = "",
+)
+
 internal data class BarsExtractionPayload(
     val name: String = "",
     val group: String = "",
     val semester: String = "",
+    val studentDetails: List<BarsStudentDetail> = emptyList(),
     val disciplines: List<BarsDiscipline> = emptyList(),
 )
 
@@ -247,6 +254,7 @@ internal class BarsViewModel(
                         profileName = payload.name,
                         profileGroup = payload.group,
                         semester = payload.semester,
+                        studentDetails = payload.studentDetails.orEmpty(),
                         disciplines = payload.disciplines,
                         isLoading = false,
                         lastUpdatedAtMillis = System.currentTimeMillis(),

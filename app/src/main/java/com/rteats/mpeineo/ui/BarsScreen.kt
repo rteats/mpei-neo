@@ -823,6 +823,7 @@ private fun BarsNativeDashboard(
     if (selectedDiscipline != null) {
         DisciplineExpandedCard(
             discipline = selectedDiscipline,
+            state = state,
             onCollapse = { selectedDisciplineName = null },
             onOpenBrowser = onOpenBrowser,
         )
@@ -1165,6 +1166,7 @@ private fun DisciplineCard(
 @Composable
 private fun DisciplineExpandedCard(
     discipline: BarsDiscipline,
+    state: BarsUiState,
     onCollapse: () -> Unit,
     onOpenBrowser: () -> Unit,
 ) {
@@ -1254,6 +1256,35 @@ private fun DisciplineExpandedCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+            }
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.extraLarge,
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("Данные студента",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold)
+                    if (state.profileName.isNotBlank()) {
+                        Text(state.profileName, style = MaterialTheme.typography.bodyLarge)
+                    }
+                    if (state.profileGroup.isNotBlank()) {
+                        Text("Группа: " + state.profileGroup)
+                    }
+                    if (state.semester.isNotBlank()) {
+                        Text("Семестр: " + state.semester)
+                    }
+                    state.studentDetails.forEach { field ->
+                        Text(field.label + ": " + field.value,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
 
@@ -1847,6 +1878,35 @@ private val BARS_EXTRACT_SCRIPT = """
                     }
                 }
 
+                // Collect labelled, visible student fields, never hidden form
+                // inputs, passwords, cookies or arbitrary body content.
+                const studentDetails = [];
+                const allowed = /^(институт|факультет|курс|форма обучения|направление|специальность|профиль|кафедра|статус|уровень образования|номер зачетной книжки|зач[её]тная книжка|группа|семестр)$/i;
+                function addField(rawLabel, rawValue) {
+                    const label = clean(rawLabel).replace(/:$/, "");
+                    const value = clean(rawValue);
+                    if (!allowed.test(label) || !value || value.length > 140 ||
+                        studentDetails.some(function(field) { return field.label === label; })) return;
+                    studentDetails.push({ label: label, value: value });
+                }
+                ["#div-FormHeader", "#div-StudentInfo", "#div-Student_Info",
+                    ".student-info", ".student-profile"].forEach(function(selector) {
+                    const section = document.querySelector(selector);
+                    if (!section) return;
+                    Array.from(section.querySelectorAll("tr")).forEach(function(row) {
+                        const cells = Array.from(row.querySelectorAll("th, td"));
+                        if (cells.length === 2) addField(cells[0].textContent, cells[1].textContent);
+                    });
+                    Array.from(section.querySelectorAll("dt")).forEach(function(dt) {
+                        if (dt.nextElementSibling && dt.nextElementSibling.tagName === "DD")
+                            addField(dt.textContent, dt.nextElementSibling.textContent);
+                    });
+                    Array.from(section.querySelectorAll("label")).forEach(function(label) {
+                        const next = label.nextElementSibling;
+                        if (next && !next.matches("input, select, textarea"))
+                            addField(label.textContent, next.textContent);
+                    });
+                });
                 const semesterNode =
                     document.querySelector(".filter-option-inner-inner");
                 const semester = semesterNode ? clean(semesterNode.textContent) : "";
@@ -1855,6 +1915,7 @@ private val BARS_EXTRACT_SCRIPT = """
                     name: name,
                     group: group,
                     semester: semester,
+                    studentDetails: studentDetails.slice(0, 18),
                     disciplines: disciplines
                 }));
             } catch (error) {
