@@ -50,12 +50,14 @@ import com.rteats.mpeineo.R
 @Composable
 internal fun SettingsScreen(
     updateViewModel: UpdateViewModel,
+    mailViewModel: MailViewModel,
     onClearCache: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var cacheCleared by remember { mutableStateOf(false) }
     var logCopied by remember { mutableStateOf(false) }
     val updateState by updateViewModel.state.collectAsState()
+    val mailState by mailViewModel.state.collectAsState()
     val context = LocalContext.current
     val application = context.applicationContext as MpeiNeoApplication
     val diagnostics = application.container.diagnostics
@@ -94,6 +96,42 @@ internal fun SettingsScreen(
             onDownload = updateViewModel::downloadUpdate,
             onInstall = ::installDownloadedUpdate,
         )
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_nav_mail),
+                        contentDescription = null,
+                    )
+                    Text(
+                        "Почта МЭИ",
+                        modifier = Modifier.padding(start = 14.dp),
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                Text(
+                    if (mailState.configured) "Аккаунт IMAP: ${mailState.username}"
+                    else "Аккаунт IMAP не подключён.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (mailState.configured) {
+                    OutlinedButton(onClick = mailViewModel::logout) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_mail_logout),
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.size(8.dp))
+                        Text("Выйти из почты")
+                    }
+                }
+            }
+        }
 
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(

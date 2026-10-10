@@ -18,7 +18,6 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationItemIconPosition
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ShortNavigationBar
 import androidx.compose.material3.ShortNavigationBarArrangement
@@ -78,17 +77,19 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
     val pager = rememberPagerState(initialPage = 0, pageCount = { AppTab.entries.size })
     val scope = rememberCoroutineScope()
     val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-    var currentTab by rememberSaveable { mutableStateOf(AppTab.SCHEDULE) }
     var todayJumpRequest by rememberSaveable { mutableIntStateOf(0) }
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     var mailWebVisible by rememberSaveable { mutableStateOf(false) }
+
+    // targetPage changes during a gesture or programmatic animation; settledPage
+    // waits until the animation finishes, visibly delaying the nav indicator.
+    val currentTab = AppTab.entries[pager.targetPage]
 
     LaunchedEffect(pager) {
         snapshotFlow { pager.settledPage }
             .distinctUntilChanged()
             .collect { page ->
-                currentTab = AppTab.entries[page]
-                if (currentTab != AppTab.SCHEDULE) searchExpanded = false
+                if (page != AppTab.SCHEDULE.ordinal) searchExpanded = false
             }
     }
 
@@ -103,7 +104,7 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
 
     val barsIsWeb = barsState.authStage != BarsAuthStage.AUTHENTICATED ||
         barsState.browserVisible
-    val nativeSwipeAllowed = !searchExpanded && when (pager.currentPage) {
+    val nativeSwipeAllowed = !searchExpanded && when (pager.settledPage) {
         AppTab.MAIL.ordinal -> !mailWebVisible
         AppTab.BARS.ordinal -> !barsIsWeb
         else -> true
@@ -120,9 +121,8 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
                 ShortNavigationBarItem(
                     selected = currentTab == AppTab.SCHEDULE,
                     onClick = { navigate(AppTab.SCHEDULE) },
-                    iconPosition = NavigationItemIconPosition.Start,
                     icon = { Icon(Icons.Default.DateRange, contentDescription = "Расписание") },
-                    label = {},
+                    label = null,
                 )
                 ShortNavigationBarItem(
                     selected = currentTab == AppTab.BARS,
@@ -133,7 +133,6 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
                             navigate(AppTab.BARS)
                         }
                     },
-                    iconPosition = NavigationItemIconPosition.Start,
                     icon = {
                         if (currentTab == AppTab.BARS && barsState.browserVisible) {
                             Icon(
@@ -147,26 +146,24 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
                             )
                         }
                     },
-                    label = {},
+                    label = null,
                 )
                 ShortNavigationBarItem(
                     selected = currentTab == AppTab.MAIL,
                     onClick = { navigate(AppTab.MAIL) },
-                    iconPosition = NavigationItemIconPosition.Start,
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_nav_mail),
                             contentDescription = "Почта",
                         )
                     },
-                    label = {},
+                    label = null,
                 )
                 ShortNavigationBarItem(
                     selected = currentTab == AppTab.SETTINGS,
                     onClick = { navigate(AppTab.SETTINGS) },
-                    iconPosition = NavigationItemIconPosition.Start,
                     icon = { Icon(Icons.Default.Settings, contentDescription = "Настройки") },
-                    label = {},
+                    label = null,
                 )
             }
         },
@@ -204,6 +201,7 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
 
                     AppTab.SETTINGS -> SettingsScreen(
                         updateViewModel = updateViewModel,
+                        mailViewModel = mailViewModel,
                         onClearCache = viewModel::clearCache,
                         modifier = Modifier.fillMaxSize(),
                     )

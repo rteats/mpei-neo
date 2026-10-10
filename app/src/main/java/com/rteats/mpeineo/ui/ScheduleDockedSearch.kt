@@ -1,6 +1,7 @@
 package com.rteats.mpeineo.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -56,7 +57,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -345,28 +345,26 @@ internal fun ScheduleDockedSearch(
                 }
             }
 
-            // A translucent bottom-to-top scrim fades upward behind the
-            // raised pill. No full-width opaque header/search backdrop.
-            Box(
-                modifier = Modifier.fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.045f),
-                                MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
-                            ),
-                        ),
-                    )
-                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp),
+            // Solid dock matches the navigation bar below it. Only the upper
+            // corners are rounded; no shadow/gradient in light or dark theme.
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer,
             ) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(28.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    tonalElevation = 3.dp,
-                    shadowElevation = 10.dp,
+                Box(
+                    modifier = Modifier.fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp),
                 ) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(28.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f),
+                        ),
+                    ) {
                 TextField(
                     value = state.searchQuery,
                     onValueChange = onQueryChanged,

@@ -218,29 +218,6 @@ internal fun MailScreen(
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         LazyColumn(modifier = Modifier.fillMaxSize()) {
-                            item {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth()
-                                        .padding(start = 18.dp, end = 12.dp, bottom = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(
-                                        "IMAP · только чтение",
-                                        modifier = Modifier.weight(1f),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    TextButton(onClick = viewModel::logout) {
-                                        Icon(
-                                            painterResource(R.drawable.ic_mail_logout),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                        Spacer(Modifier.size(4.dp))
-                                        Text("Выход")
-                                    }
-                                }
-                            }
                             if (state.items.isEmpty()) {
                                 item {
                                     Box(
