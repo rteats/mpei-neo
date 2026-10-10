@@ -494,7 +494,7 @@ private fun UpdateCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    SettingsActionSettingsActionButton(onClick = onCheck) {
+                    SettingsActionButton(onClick = onCheck) {
                         Text("Проверить обновления")
                     }
                 }
@@ -522,7 +522,7 @@ private fun UpdateCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    SettingsActionSettingsActionButton(onClick = onCheck) {
+                    SettingsActionButton(onClick = onCheck) {
                         Text("Проверить снова")
                     }
                 }
@@ -587,11 +587,11 @@ private fun UpdateCard(
                         color = MaterialTheme.colorScheme.error,
                     )
                     if (state.release != null) {
-                        SettingsActionSettingsActionButton(onClick = onDownload) {
+                        SettingsActionButton(onClick = onDownload) {
                             Text("Повторить загрузку")
                         }
                     } else {
-                        SettingsActionSettingsActionButton(onClick = onCheck) {
+                        SettingsActionButton(onClick = onCheck) {
                             Text("Повторить проверку")
                         }
                     }
