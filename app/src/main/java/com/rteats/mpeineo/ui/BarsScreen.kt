@@ -30,10 +30,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -56,6 +62,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,6 +70,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -1109,6 +1117,8 @@ private fun DisciplineDetailsSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.77f)
+            .verticalScroll(rememberScrollState())
             .padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
     ) {
         Text(
@@ -1160,6 +1170,11 @@ private fun DisciplineDetailsSheet(
             )
         }
 
+        GradeForecastDropdown(
+            discipline = discipline,
+            modifier = Modifier.padding(top = 16.dp, bottom = 6.dp),
+        )
+
         if (finalGrades.isNotEmpty()) {
             Text(
                 text = "Итоговые оценки",
@@ -1172,6 +1187,155 @@ private fun DisciplineDetailsSheet(
                 FinalGradeRow(activity)
                 if (index != finalGrades.lastIndex) {
                     HorizontalDivider()
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Every discipline has a collapsible calculator in its details sheet.
+ * All input comes from BARS control rows and their explicit weights.
+ */
+@Composable
+private fun GradeForecastDropdown(
+    discipline: BarsDiscipline,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by rememberSaveable(discipline.disciplineName) { mutableStateOf(false) }
+    val result = remember(discipline) { calculateGradeForecast(discipline) }
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Surface(
+            onClick = { expanded = !expanded },
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            shape = MaterialTheme.shapes.large,
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Калькулятор оценок · ≥ 4,2",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Icon(
+                    if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+        }
+        AnimatedVisibility(visible = expanded) {
+            Column(
+                modifier = Modifier.padding(top = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                when (result) {
+                    is GradeForecast.Unavailable -> {
+                        Text(
+                            result.explanation,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    is GradeForecast.Available -> {
+                        Text(
+                            "Текущая сумма: ${formatBarsWeightedSum(result.currentSum)}  ·  " +
+                                "Σ весов: ${formatBarsWeightedSum(result.totalWeight)}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (result.totalWeight < 0.999) {
+                            Text(
+                                "Сумма известных весов меньше 1. Учитываются только " +
+                                    "отображаемые в БАРС мероприятия; неуказанные веса " +
+                                    "и экзамен отдельно не предполагаются.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (result.combinations.isEmpty()) {
+                            Text(
+                                "С указанными весами порог 4,2 недостижим, " +
+                                    "даже если за оставшиеся мероприятия получить 5.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        } else if (result.remaining.isEmpty()) {
+                            Text(
+                                "Порог уже достигнут: " +
+                                    formatBarsWeightedSum(result.currentSum) +
+                                    " ≥ 4,2. Будущих оценок с известным весом нет.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        } else {
+                            Text(
+                                "Варианты оценок за оставшиеся мероприятия (2–5):",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            result.combinations.forEachIndexed { index, combination ->
+                                Surface(
+                                    shape = MaterialTheme.shapes.medium,
+                                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                ) {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        Text(
+                                            "Вариант ${index + 1} · " +
+                                                formatBarsWeightedSum(combination.weightedSum) +
+                                                " ≥ 4,2",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                        result.remaining.forEachIndexed { slotIndex, slot ->
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                Text(
+                                                    "${slot.name} (×${formatBarsWeightedSum(slot.weight)})",
+                                                    modifier = Modifier.weight(1f),
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                )
+                                                GradeChip(
+                                                    combination.marks[slotIndex].toString(),
+                                                    combination.marks[slotIndex].toFloat(),
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if (result.truncated) {
+                                Text(
+                                    "Показаны первые 30 подходящих сочетаний.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        Text(
+                            "Прогноз: Σ(оценка × вес) ≥ 4,2. " +
+                                "Он не изменяет оценки БАРС и не учитывает " +
+                                "правила выставления итоговой оценки преподавателем.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }

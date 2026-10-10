@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -42,6 +43,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -83,6 +85,8 @@ internal fun ScheduleDockedSearch(
     onSelect: (ScheduleTarget) -> Unit,
     onToggleFavorite: (ScheduleTarget) -> Unit,
     onRenameFavorite: (ScheduleTarget, String) -> Unit,
+    onExpandedChange: (Boolean) -> Unit,
+    active: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -93,6 +97,7 @@ internal fun ScheduleDockedSearch(
 
     fun closeSearch() {
         expanded = false
+        onExpandedChange(false)
         onQueryChanged("")
         focusManager.clearFocus(force = true)
         keyboard?.hide()
@@ -103,7 +108,10 @@ internal fun ScheduleDockedSearch(
         closeSearch()
     }
 
-    BackHandler(enabled = expanded && renameTarget == null) { closeSearch() }
+    androidx.compose.runtime.LaunchedEffect(active) {
+        if (!active && expanded) closeSearch()
+    }
+    BackHandler(enabled = active && expanded && renameTarget == null) { closeSearch() }
 
     val favorites = matchingFavorites(
         state.favorites, state.favoriteNames, state.searchQuery, state.searchType,
@@ -337,25 +345,39 @@ internal fun ScheduleDockedSearch(
                 }
             }
 
+            // A translucent bottom-to-top scrim fades upward behind the
+            // raised pill. No full-width opaque header/search backdrop.
             Box(
                 modifier = Modifier.fillMaxWidth()
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
                                 Color.Transparent,
-                                MaterialTheme.colorScheme.background.copy(alpha = 0.93f),
-                                MaterialTheme.colorScheme.background,
+                                MaterialTheme.colorScheme.shadow.copy(alpha = 0.045f),
+                                MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
                             ),
                         ),
                     )
-                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp),
             ) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(28.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    tonalElevation = 3.dp,
+                    shadowElevation = 10.dp,
+                ) {
                 TextField(
                     value = state.searchQuery,
                     onValueChange = onQueryChanged,
                     modifier = Modifier.fillMaxWidth()
                         .testTag("schedule-docked-search")
-                        .onFocusChanged { if (it.isFocused) expanded = true },
+                        .onFocusChanged {
+                            if (it.isFocused && !expanded) {
+                                expanded = true
+                                onExpandedChange(true)
+                            }
+                        },
                     singleLine = true,
                     shape = RoundedCornerShape(28.dp),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -394,6 +416,7 @@ internal fun ScheduleDockedSearch(
                         }
                     },
                 )
+                }
             }
         }
     }
