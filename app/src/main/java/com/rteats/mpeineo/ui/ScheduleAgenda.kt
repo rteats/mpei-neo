@@ -1,76 +1,70 @@
 package com.rteats.mpeineo.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ContainedLoadingIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.rteats.mpeineo.model.ScheduleDay
 import java.time.LocalDate
+import java.time.DayOfWeek
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
-import java.time.DayOfWeek
 import java.util.Locale
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
-
-// Bounded native-sticky timeline. Shift this window before reaching an edge.
-// Keys remain stable across shifts, so old weeks stay reachable indefinitely
-// without allocating thousands of stickyHeader intervals at composition time.
-private const val WINDOW_DAYS = 126
-private const val WINDOW_SHIFT_DAYS = 35
-private const val WINDOW_EDGE_DAYS = 21
-// An indicator does not assert that new lessons exist; it only suggests checking.
-private const val SCHEDULE_STALE_AFTER_MS = 30 * 60 * 1000L
 
 /**
- * Calendar-style agenda with native LazyColumn stickyHeader per date.
- * Header and lessons belong to the same lazy list; a next date pushes the prior
- * sticky date away. A sliding window bounds the number of composed intervals,
- * while date-stable keys and requestScrollToItem preserve scroll position.
+ * The vertical agenda is an infinite sequence of bounded, seven-day pages.
+ * Normal scrolling remains native LazyColumn scrolling. Only a deliberate
+ * overscroll at Monday/Sunday changes week; no horizontal day pager exists.
  */
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun ScheduleAgenda(
     state: MainUiState,
@@ -84,114 +78,162 @@ internal fun ScheduleAgenda(
     val monday = remember(today) {
         today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
     }
-    val todayDayOffset = today.dayOfWeek.value - 1
-    val initialWindowStart = todayDayOffset - WINDOW_DAYS / 2
-    var windowStartDay by remember { mutableIntStateOf(initialWindowStart) }
-    val listState = rememberLazyListState(
-        initialFirstVisibleItemIndex = (todayDayOffset - initialWindowStart) * 2,
-    )
-    val refreshState = rememberPullToRefreshState()
+    val currentDayIndex = today.dayOfWeek.value - 1
     val selectedId = state.selected?.id
     val selectedType = state.selected?.type
-
-    LaunchedEffect(selectedId, selectedType) {
-        windowStartDay = initialWindowStart
-        listState.requestScrollToItem((todayDayOffset - initialWindowStart) * 2)
+    var visibleWeek by rememberSaveable(selectedId, selectedType) { mutableIntStateOf(0) }
+    var entryDay by rememberSaveable(selectedId, selectedType) {
+        mutableIntStateOf(currentDayIndex)
     }
+    val locale = remember { Locale.forLanguageTag("ru") }
+    val weekDateFormat = remember { DateTimeFormatter.ofPattern("d MMM", locale) }
+    val overscrollThreshold = with(LocalDensity.current) { 84.dp.toPx() }
+    val overscrollMax = with(LocalDensity.current) { 180.dp.toPx() }
 
-    // Never create the whole multi-year timeline as LazyListScope intervals.
-    // Move 35 days at a time, well before the currently visible day reaches an
-    // edge. requestScrollToItem compensates for the inserted/removed items
-    // synchronously with the next remeasure (each date uses two list items).
-    LaunchedEffect(listState.firstVisibleItemIndex, windowStartDay) {
-        val firstIndex = listState.firstVisibleItemIndex
-        val visibleWindowDay = firstIndex / 2
-        val shift = when {
-            visibleWindowDay < WINDOW_EDGE_DAYS -> -WINDOW_SHIFT_DAYS
-            visibleWindowDay >= WINDOW_DAYS - WINDOW_EDGE_DAYS -> WINDOW_SHIFT_DAYS
-            else -> 0
-        }
-        if (shift != 0) {
-            val offset = listState.firstVisibleItemScrollOffset
-            windowStartDay += shift
-            listState.requestScrollToItem(firstIndex - shift * 2, offset)
-        }
+    LaunchedEffect(selectedId, selectedType, visibleWeek) {
+        onEnsureWeek(visibleWeek)
+        // Preload adjacent weeks without displaying their days.
+        onEnsureWeek(visibleWeek - 1)
+        onEnsureWeek(visibleWeek + 1)
     }
-
-    val visibleDayOffset by remember(listState, windowStartDay) {
-        derivedStateOf {
-            windowStartDay + listState.firstVisibleItemIndex / 2
-        }
-    }
-    val visibleWeekOffset = Math.floorDiv(visibleDayOffset, 7)
-
-    // The active Schedule destination doubles as a jump-to-today action.
-    // When invoked, recenter the bounded timeline even after months of scrolling.
     LaunchedEffect(todayJumpRequest) {
-        windowStartDay = initialWindowStart
-        listState.requestScrollToItem((todayDayOffset - initialWindowStart) * 2)
+        visibleWeek = 0
+        entryDay = currentDayIndex
     }
 
-    Column(modifier = modifier) {
-        PullToRefreshBox(
-            isRefreshing = visibleWeekOffset in state.agendaLoadingOffsets,
-            onRefresh = { onRefreshWeek(visibleWeekOffset) },
-            state = refreshState,
-            indicator = {
-                PullToRefreshDefaults.LoadingIndicator(
-                    state = refreshState,
-                    isRefreshing = visibleWeekOffset in state.agendaLoadingOffsets,
-                    modifier = Modifier.align(Alignment.TopCenter),
-                )
-            },
-            modifier = Modifier.weight(1f),
-        ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
-                state = listState,
-                contentPadding = PaddingValues(top = 8.dp, bottom = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                for (dayInWindow in 0 until WINDOW_DAYS) {
-                    val dayOffset = windowStartDay + dayInWindow
-                    val date = monday.plusDays(dayOffset.toLong())
-                    val relativeWeek = Math.floorDiv(dayOffset, 7)
+    AnimatedContent(
+        targetState = visibleWeek,
+        modifier = modifier.fillMaxSize(),
+        label = "schedule-week",
+        transitionSpec = {
+            val forward = targetState > initialState
+            (slideInVertically(
+                initialOffsetY = { if (forward) it / 4 else -it / 4 },
+                animationSpec = tween(230, easing = FastOutSlowInEasing),
+            ) + fadeIn(animationSpec = tween(160))) togetherWith
+                (slideOutVertically(
+                    targetOffsetY = { if (forward) -it / 4 else it / 4 },
+                    animationSpec = tween(230, easing = FastOutSlowInEasing),
+                ) + fadeOut(animationSpec = tween(160)))
+        },
+    ) { displayedWeek ->
+        val weekStart = monday.plusWeeks(displayedWeek.toLong())
+        val weekEnd = weekStart.plusDays(6)
+        val listState = remember(displayedWeek, selectedId, selectedType, todayJumpRequest) {
+            LazyListState(initialFirstVisibleItemIndex = entryDay.coerceIn(0, 6) * 2)
+        }
+        var overscroll by remember(displayedWeek) { mutableFloatStateOf(0f) }
 
-                    // One actual header per date: not an overlay or a mirrored
-                    // copy. Compose's native stickyHeader handles the push-off
-                    // animation when the next date arrives.
-                    stickyHeader(
-                        key = "date-header-$dayOffset",
-                        contentType = "date-header",
-                    ) {
-                        AgendaDayHeader(date = date, today = today)
-                    }
+        val overscrollConnection = remember(displayedWeek, overscrollThreshold, overscrollMax) {
+            object : NestedScrollConnection {
+                override fun onPostScroll(
+                    consumed: Offset,
+                    available: Offset,
+                    source: NestedScrollSource,
+                ): Offset {
+                    if (displayedWeek != visibleWeek ||
+                        source != NestedScrollSource.UserInput || available.y == 0f
+                    ) return Offset.Zero
 
-                    item(
-                        key = "date-content-$dayOffset",
-                        contentType = "date-content",
-                    ) {
-                        val dayData: ScheduleDay? =
-                            state.agendaWeeks[relativeWeek]?.days
-                                ?.firstOrNull { it.date == date.toString() }
-                                ?: if (relativeWeek == state.weekOffset) {
-                                    state.week?.days?.firstOrNull { it.date == date.toString() }
-                                } else null
+                    // Ignore a reversed drag until the prior edge displacement
+                    // has returned to zero. Avoid switching twice in one gesture.
+                    overscroll = (overscroll + available.y)
+                        .coerceIn(-overscrollMax, overscrollMax)
+                    return Offset.Zero
+                }
 
-                        LaunchedEffect(selectedId, selectedType, relativeWeek) {
-                            onEnsureWeek(relativeWeek)
-                            if (dayOffset % 7 == 0 || dayOffset == todayDayOffset) {
-                                onEnsureWeek(relativeWeek + 1)
-                                onEnsureWeek(relativeWeek - 1)
+                override suspend fun onPostFling(
+                    consumed: Velocity,
+                    available: Velocity,
+                ): Velocity {
+                    if (displayedWeek == visibleWeek) {
+                        when {
+                            overscroll >= overscrollThreshold -> {
+                                entryDay = 6 // previous week lands on Sunday
+                                visibleWeek = displayedWeek - 1
+                            }
+                            overscroll <= -overscrollThreshold -> {
+                                entryDay = 0 // next week begins on Monday
+                                visibleWeek = displayedWeek + 1
                             }
                         }
+                    }
+                    overscroll = 0f
+                    return Velocity.Zero
+                }
+            }
+        }
 
-                        AgendaDaySection(
-                            day = dayData,
-                            loading = relativeWeek in state.agendaLoadingOffsets ||
-                                (relativeWeek == state.weekOffset && state.isLoading),
-                            failed = relativeWeek in state.agendaFailedOffsets,
-                            onRetry = { onRetryWeek(relativeWeek) },
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier.fillMaxWidth()
+                    .padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    weekStart.format(weekDateFormat) + " – " + weekEnd.format(weekDateFormat),
+                    modifier = Modifier.weight(1f).padding(start = 10.dp),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                IconButton(onClick = { onRefreshWeek(displayedWeek) }) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Обновить эту неделю")
+                }
+            }
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()
+                .nestedScroll(overscrollConnection)) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize()
+                        .graphicsLayer { translationY = overscroll * 0.22f },
+                    state = listState,
+                    contentPadding = PaddingValues(top = 4.dp, bottom = 22.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    for (dayIndex in 0..6) {
+                        val date = weekStart.plusDays(dayIndex.toLong())
+                        stickyHeader(
+                            key = "day-header-$date",
+                            contentType = "date-header",
+                        ) {
+                            AgendaDayHeader(date, today)
+                        }
+                        item(key = "day-content-$date", contentType = "date-content") {
+                            val dayData: ScheduleDay? =
+                                state.agendaWeeks[displayedWeek]?.days
+                                    ?.firstOrNull { it.date == date.toString() }
+                                    ?: if (displayedWeek == state.weekOffset) {
+                                        state.week?.days?.firstOrNull {
+                                            it.date == date.toString()
+                                        }
+                                    } else null
+                            AgendaDaySection(
+                                day = dayData,
+                                loading = displayedWeek in state.agendaLoadingOffsets ||
+                                    (displayedWeek == state.weekOffset && state.isLoading),
+                                failed = displayedWeek in state.agendaFailedOffsets ||
+                                    (displayedWeek == state.weekOffset &&
+                                        state.error != null && dayData == null),
+                                onRetry = { onRetryWeek(displayedWeek) },
+                            )
+                        }
+                    }
+                }
+                if (overscroll != 0f) {
+                    val previous = overscroll > 0f
+                    Surface(
+                        modifier = Modifier.align(
+                            if (previous) Alignment.TopCenter else Alignment.BottomCenter,
+                        ).padding(8.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                    ) {
+                        Text(
+                            if (previous) "Предыдущая неделя" else "Следующая неделя",
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
                         )
                     }
                 }
