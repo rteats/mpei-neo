@@ -12,6 +12,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -120,7 +121,7 @@ internal fun ScheduleAgenda(
         val weekStart = monday.plusWeeks(displayedWeek.toLong())
         val weekEnd = weekStart.plusDays(6)
         val listState = rememberLazyListState(
-            initialFirstVisibleItemIndex = entryDay.coerceIn(0, 6) * 2,
+            initialFirstVisibleItemIndex = entryDay.coerceIn(0, 6),
         )
         var overscroll by remember(displayedWeek) { mutableFloatStateOf(0f) }
 
@@ -204,13 +205,7 @@ internal fun ScheduleAgenda(
                 ) {
                     for (dayIndex in 0..6) {
                         val date = weekStart.plusDays(dayIndex.toLong())
-                        stickyHeader(
-                            key = "day-header-$date",
-                            contentType = "date-header",
-                        ) {
-                            AgendaDayHeader(date, today)
-                        }
-                        item(key = "day-content-$date", contentType = "date-content") {
+                        item(key = "day-$date", contentType = "day-card") {
                             val dayData: ScheduleDay? =
                                 state.agendaWeeks[displayedWeek]?.days
                                     ?.firstOrNull { it.date == date.toString() }
@@ -219,7 +214,9 @@ internal fun ScheduleAgenda(
                                             it.date == date.toString()
                                         }
                                     } else null
-                            AgendaDaySection(
+                            AgendaDayCard(
+                                date = date,
+                                today = today,
                                 day = dayData,
                                 loading = displayedWeek in state.agendaLoadingOffsets ||
                                     (displayedWeek == state.weekOffset && state.isLoading),
@@ -309,8 +306,44 @@ private fun AgendaDaySection(
 }
 
 /**
- * Native sticky weekday label, rendered exactly once per date by LazyColumn.
+ * One rounded container per day. The accent stays in the title and outline,
+ * so lesson-specific tonal fills maintain contrast in both light and dark themes.
  */
+@Composable
+private fun AgendaDayCard(
+    date: LocalDate,
+    today: LocalDate,
+    day: ScheduleDay?,
+    loading: Boolean,
+    failed: Boolean,
+    onRetry: () -> Unit,
+) {
+    val isToday = date == today
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = if (isToday) BorderStroke(
+            1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
+        ) else null,
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            AgendaDayHeader(date, today)
+            Column(modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)) {
+                AgendaDaySection(
+                    day = day,
+                    loading = loading,
+                    failed = failed,
+                    onRetry = onRetry,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun AgendaDayHeader(
     date: LocalDate,
@@ -322,20 +355,18 @@ private fun AgendaDayHeader(
     val isToday = date == today
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        color = if (isToday) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = MaterialTheme.shapes.large,
+        color = if (isToday) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surfaceContainer,
+        contentColor = if (isToday) MaterialTheme.colorScheme.onPrimaryContainer
+            else MaterialTheme.colorScheme.onSurface,
     ) {
         Text(
             date.format(dateFormat).replaceFirstChar { it.titlecase(language) } +
                 if (isToday) " • Сегодня" else "",
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
-            color = if (isToday) {
-                MaterialTheme.colorScheme.onPrimaryContainer
-            } else MaterialTheme.colorScheme.onSurface,
         )
     }
 }
