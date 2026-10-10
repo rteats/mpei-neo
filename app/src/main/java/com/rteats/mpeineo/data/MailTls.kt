@@ -90,17 +90,20 @@ internal class MailTlsTrust(context: Context) {
             }
 
             override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
-                try {
+                if (pinned == null) {
                     trustManager.checkServerTrusted(chain, authType)
                     return
-                } catch (original: CertificateException) {
-                    val leaf = chain.firstOrNull() ?: throw original
-                    if (pinned == null || certificateFingerprint(leaf) != pinned) throw original
-                    // Explicit leaf pin: verify lifetime and server's TLS proof
-                    // of private-key possession. JavaMail ALSO performs hostname
-                    // verification via mail.imaps.ssl.checkserveridentity=true.
-                    leaf.checkValidity(Date())
                 }
+                // Once approved, fail closed on any certificate rotation,
+                // including if the replacement chains to a public CA.
+                val leaf = chain.firstOrNull()
+                    ?: throw CertificateException("Сервер не представил сертификат")
+                if (certificateFingerprint(leaf) != pinned) {
+                    throw CertificateException("Сертификат почтового сервера изменился (SHA-256 pin mismatch)")
+                }
+                // TLS also verifies server possession of the leaf private key.
+                // JavaMail checks the hostname separately.
+                leaf.checkValidity(Date())
             }
         }
         return SSLContext.getInstance("TLS").apply {
