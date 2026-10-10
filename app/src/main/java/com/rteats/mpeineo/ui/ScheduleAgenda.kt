@@ -77,6 +77,7 @@ internal fun ScheduleAgenda(
     onEnsureWeek: (Int) -> Unit,
     onRefreshWeek: (Int) -> Unit,
     onRetryWeek: (Int) -> Unit,
+    todayJumpRequest: Int,
     modifier: Modifier = Modifier,
 ) {
     val today = remember { LocalDate.now() }
@@ -89,7 +90,6 @@ internal fun ScheduleAgenda(
     val listState = rememberLazyListState(
         initialFirstVisibleItemIndex = (todayDayOffset - initialWindowStart) * 2,
     )
-    val scope = rememberCoroutineScope()
     val refreshState = rememberPullToRefreshState()
     val selectedId = state.selected?.id
     val selectedType = state.selected?.type
@@ -124,72 +124,15 @@ internal fun ScheduleAgenda(
         }
     }
     val visibleWeekOffset = Math.floorDiv(visibleDayOffset, 7)
-    val visibleDate = monday.plusDays(visibleDayOffset.toLong())
 
-    var clockMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(60_000L)
-            clockMillis = System.currentTimeMillis()
-        }
+    // The active Schedule destination doubles as a jump-to-today action.
+    // When invoked, recenter the bounded timeline even after months of scrolling.
+    LaunchedEffect(todayJumpRequest) {
+        windowStartDay = initialWindowStart
+        listState.requestScrollToItem((todayDayOffset - initialWindowStart) * 2)
     }
-    val visibleWeek = state.agendaWeeks[visibleWeekOffset]
-        ?: state.week?.takeIf { state.weekOffset == visibleWeekOffset }
-    val needsRefresh = visibleWeek?.let {
-        it.fetchedAtEpochMillis <= 0 ||
-            clockMillis - it.fetchedAtEpochMillis > SCHEDULE_STALE_AFTER_MS
-    } == true
 
     Column(modifier = modifier) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                visibleDate.format(
-                    remember { DateTimeFormatter.ofPattern("LLLL yyyy", Locale.forLanguageTag("ru")) },
-                ).replaceFirstChar { it.titlecase(Locale.forLanguageTag("ru")) },
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(
-                    onClick = {
-                        scope.launch {
-                            // Recenter even if the user scrolled months away.
-                            windowStartDay = initialWindowStart
-                            listState.requestScrollToItem(
-                                (todayDayOffset - initialWindowStart) * 2,
-                            )
-                        }
-                    },
-                ) {
-                    Icon(Icons.Default.DateRange, contentDescription = null)
-                    Text("Сегодня")
-                }
-                IconButton(
-                    onClick = { onRefreshWeek(visibleWeekOffset) },
-                ) {
-                    BadgedBox(
-                        badge = { if (needsRefresh) Badge() },
-                    ) {
-                        Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = if (needsRefresh) {
-                                "Обновить расписание: данные старше 30 минут"
-                            } else {
-                                "Обновить текущую неделю"
-                            },
-                            tint = if (needsRefresh) {
-                                MaterialTheme.colorScheme.primary
-                            } else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-        }
-
         PullToRefreshBox(
             isRefreshing = visibleWeekOffset in state.agendaLoadingOffsets,
             onRefresh = { onRefreshWeek(visibleWeekOffset) },
@@ -206,7 +149,7 @@ internal fun ScheduleAgenda(
             LazyColumn(
                 modifier = Modifier.fillMaxWidth(),
                 state = listState,
-                contentPadding = PaddingValues(top = 8.dp, bottom = 112.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 for (dayInWindow in 0 until WINDOW_DAYS) {

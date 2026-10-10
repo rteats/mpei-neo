@@ -25,6 +25,7 @@ import kotlinx.coroutines.launch
 data class MainUiState(
     val selected: ScheduleTarget? = null,
     val favorites: List<ScheduleTarget> = emptyList(),
+    val favoriteNames: Map<String, String> = emptyMap(),
     val weekOffset: Int = 0,
     val week: ScheduleWeek? = null,
     val source: ScheduleSource? = null,
@@ -38,7 +39,6 @@ data class MainUiState(
     val searchResults: List<ScheduleTarget> = emptyList(),
     val isSearching: Boolean = false,
     val searchError: String? = null,
-    val refreshOnLaunch: Boolean = true,
 )
 
 class MainViewModel(
@@ -59,16 +59,16 @@ class MainViewModel(
             }
         }
         viewModelScope.launch {
-            container.preferences.refreshOnLaunch.collect { enabled ->
-                _state.update { it.copy(refreshOnLaunch = enabled) }
+            container.preferences.favoriteNames.collect { names ->
+                _state.update { it.copy(favoriteNames = names) }
             }
         }
         viewModelScope.launch {
             val selected = container.preferences.selected.first()
-            val refresh = container.preferences.refreshOnLaunch.first()
             if (selected != null) {
                 _state.update { it.copy(selected = selected) }
-                loadWeek(forceNetwork = refresh)
+                // Always show the cached week immediately and refresh it in the background.
+                loadWeek(forceNetwork = true)
             }
         }
     }
@@ -244,6 +244,12 @@ class MainViewModel(
         }
     }
 
+    fun renameFavorite(target: ScheduleTarget, name: String) {
+        viewModelScope.launch {
+            container.preferences.renameFavorite(target, name)
+        }
+    }
+
     fun previousWeek() {
         _state.update { it.copy(weekOffset = it.weekOffset - 1) }
         loadWeek(forceNetwork = false)
@@ -262,12 +268,6 @@ class MainViewModel(
 
     fun refresh() {
         loadWeek(forceNetwork = true)
-    }
-
-    fun setRefreshOnLaunch(enabled: Boolean) {
-        viewModelScope.launch {
-            container.preferences.setRefreshOnLaunch(enabled)
-        }
     }
 
     fun clearCache() {

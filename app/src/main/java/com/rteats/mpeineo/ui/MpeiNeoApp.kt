@@ -7,32 +7,25 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledIconToggleButton
-import androidx.compose.material3.FloatingToolbarDefaults
-import androidx.compose.material3.FloatingToolbarExitDirection.Companion.Bottom
-import androidx.compose.material3.HorizontalFloatingToolbar
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationItemIconPosition
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ShortNavigationBar
+import androidx.compose.material3.ShortNavigationBarArrangement
+import androidx.compose.material3.ShortNavigationBarItem
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -43,21 +36,18 @@ import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
 import com.rteats.mpeineo.MpeiNeoApplication
 import com.rteats.mpeineo.R
 
-private enum class AppTab {
-    SCHEDULE,
-    BARS,
-    MAIL,
-    SETTINGS,
-}
+private enum class AppTab { SCHEDULE, BARS, MAIL, SETTINGS }
 
 /**
- * Floating navigation follows ScrollableHorizontalFloatingToolbarSample.
- * A selected destination is a FilledIconToggleButton; Search belongs to Schedule.
+ * Material 3 Expressive short navigation bar with horizontal icon-and-label
+ * items. EqualWeight keeps four short labels legible on narrow phones.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MpeiNeoApp(viewModel: MainViewModel) {
     var tab by rememberSaveable { mutableStateOf(AppTab.SCHEDULE) }
+    var todayJumpRequest by rememberSaveable { mutableIntStateOf(0) }
+
     val application = LocalContext.current.applicationContext as MpeiNeoApplication
     val barsViewModel: BarsViewModel = composeViewModel(
         factory = BarsViewModel.factory(
@@ -69,105 +59,84 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
         factory = UpdateViewModel.factory(application.container),
     )
     val barsState by barsViewModel.state.collectAsState()
-    val toolbarScrollBehavior = FloatingToolbarDefaults.exitAlwaysScrollBehavior(
-        exitDirection = Bottom,
-    )
 
     Scaffold(
-        modifier = Modifier.nestedScroll(toolbarScrollBehavior),
-        // The toolbar is overlaid by the outer Box; there must be no opaque
-        // navigation bar surface or reserved strip underneath it.
         containerColor = MaterialTheme.colorScheme.background,
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize(),
-        ) {
-            AppContent(
-                viewModel = viewModel,
-                barsViewModel = barsViewModel,
-                updateViewModel = updateViewModel,
-                tab = tab,
-                // The page draws all the way to the bottom behind the floating
-                // toolbar. Scrollable screens provide their own *scrollable* end
-                // space, so the last row can still be reached when the toolbar is visible.
-                modifier = Modifier.fillMaxSize(),
-            )
-
-            HorizontalFloatingToolbar(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .offset(y = -FloatingToolbarDefaults.ScreenOffset)
-                    .zIndex(1f),
-                expanded = true,
-                scrollBehavior = toolbarScrollBehavior,
+        bottomBar = {
+            ShortNavigationBar(
+                arrangement = ShortNavigationBarArrangement.EqualWeight,
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    FloatingDestination(
-                        selected = tab == AppTab.SCHEDULE,
-                        onSelect = { tab = AppTab.SCHEDULE },
-                    ) {
-                        Icon(Icons.Default.DateRange, contentDescription = "Расписание")
-                    }
-                    FloatingDestination(
-                        selected = tab == AppTab.BARS,
-                        onSelect = {
-                            if (tab == AppTab.BARS && barsState.browserVisible) {
-                                barsViewModel.hideBrowser()
-                            } else {
-                                tab = AppTab.BARS
-                            }
-                        },
-                    ) {
+                ShortNavigationBarItem(
+                    selected = tab == AppTab.SCHEDULE,
+                    onClick = {
+                        tab = AppTab.SCHEDULE
+                        // Also works when Schedule is already selected.
+                        todayJumpRequest++
+                    },
+                    iconPosition = NavigationItemIconPosition.Start,
+                    icon = { Icon(Icons.Default.DateRange, contentDescription = null) },
+                    label = { Text("Пары", maxLines = 1) },
+                )
+                ShortNavigationBarItem(
+                    selected = tab == AppTab.BARS,
+                    onClick = {
                         if (tab == AppTab.BARS && barsState.browserVisible) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Вернуться к оценкам",
-                            )
+                            barsViewModel.hideBrowser()
+                        } else {
+                            tab = AppTab.BARS
+                        }
+                    },
+                    iconPosition = NavigationItemIconPosition.Start,
+                    icon = {
+                        if (tab == AppTab.BARS && barsState.browserVisible) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                         } else {
                             Icon(
                                 painter = painterResource(R.drawable.ic_nav_bars),
-                                contentDescription = "БАРС",
+                                contentDescription = null,
                             )
                         }
-                    }
-                    FloatingDestination(
-                        selected = tab == AppTab.MAIL,
-                        onSelect = { tab = AppTab.MAIL },
-                    ) {
+                    },
+                    label = {
+                        Text(
+                            if (tab == AppTab.BARS && barsState.browserVisible) "Оценки" else "БАРС",
+                            maxLines = 1,
+                        )
+                    },
+                )
+                ShortNavigationBarItem(
+                    selected = tab == AppTab.MAIL,
+                    onClick = { tab = AppTab.MAIL },
+                    iconPosition = NavigationItemIconPosition.Start,
+                    icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_nav_mail),
-                            contentDescription = "Почта",
+                            contentDescription = null,
                         )
-                    }
-                    FloatingDestination(
-                        selected = tab == AppTab.SETTINGS,
-                        onSelect = { tab = AppTab.SETTINGS },
-                    ) {
-                        Icon(Icons.Default.Settings, contentDescription = "Настройки")
-                    }
-                }
+                    },
+                    label = { Text("Почта", maxLines = 1) },
+                )
+                ShortNavigationBarItem(
+                    selected = tab == AppTab.SETTINGS,
+                    onClick = { tab = AppTab.SETTINGS },
+                    iconPosition = NavigationItemIconPosition.Start,
+                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                    label = { Text("Опции", maxLines = 1) },
+                )
             }
-        }
-    }
-}
-
-@Composable
-private fun FloatingDestination(
-    selected: Boolean,
-    onSelect: () -> Unit,
-    icon: @Composable () -> Unit,
-) {
-    FilledIconToggleButton(
-        checked = selected,
-        onCheckedChange = { onSelect() },
-        shapes = IconButtonDefaults.toggleableShapes(),
-    ) {
-        icon()
+        },
+    ) { innerPadding ->
+        AppContent(
+            viewModel = viewModel,
+            barsViewModel = barsViewModel,
+            updateViewModel = updateViewModel,
+            tab = tab,
+            todayJumpRequest = todayJumpRequest,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+        )
     }
 }
 
@@ -177,6 +146,7 @@ private fun AppContent(
     barsViewModel: BarsViewModel,
     updateViewModel: UpdateViewModel,
     tab: AppTab,
+    todayJumpRequest: Int,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsState()
@@ -203,12 +173,14 @@ private fun AppContent(
                 state = state,
                 onSelect = viewModel::selectTarget,
                 onToggleFavorite = viewModel::toggleFavorite,
+                onRenameFavorite = viewModel::renameFavorite,
                 onQueryChanged = viewModel::updateSearchQuery,
                 onTypeChanged = viewModel::setSearchType,
                 onSearch = viewModel::search,
                 onEnsureAgendaWeek = viewModel::ensureAgendaWeek,
                 onRefreshAgendaWeek = viewModel::refreshAgendaWeek,
                 onRetryAgendaWeek = viewModel::retryAgendaWeek,
+                todayJumpRequest = todayJumpRequest,
                 modifier = Modifier.fillMaxSize(),
             )
 
@@ -224,9 +196,7 @@ private fun AppContent(
             )
 
             AppTab.SETTINGS -> SettingsScreen(
-                state = state,
                 updateViewModel = updateViewModel,
-                onRefreshOnLaunchChanged = viewModel::setRefreshOnLaunch,
                 onClearCache = viewModel::clearCache,
                 modifier = Modifier.fillMaxSize(),
             )

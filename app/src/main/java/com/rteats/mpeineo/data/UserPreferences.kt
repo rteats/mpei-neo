@@ -1,13 +1,13 @@
 package com.rteats.mpeineo.data
 
 import android.content.Context
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.rteats.mpeineo.model.ScheduleTarget
+import com.rteats.mpeineo.model.favoriteKey
 import com.rteats.mpeineo.model.isUsable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -20,7 +20,7 @@ class UserPreferences(
 ) {
     private val favoritesKey = stringPreferencesKey("favorites")
     private val selectedKey = stringPreferencesKey("selected_schedule")
-    private val refreshOnLaunchKey = booleanPreferencesKey("refresh_on_launch")
+    private val favoriteNamesKey = stringPreferencesKey("favorite_custom_names")
 
     val favorites: Flow<List<ScheduleTarget>> = context.dataStore.data.map { prefs ->
         decodeFavorites(prefs[favoritesKey])
@@ -34,25 +34,51 @@ class UserPreferences(
         }
     }
 
-    val refreshOnLaunch: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[refreshOnLaunchKey] ?: true
+    val favoriteNames: Flow<Map<String, String>> = context.dataStore.data.map { prefs ->
+        decodeFavoriteNames(prefs[favoriteNamesKey])
     }
 
     suspend fun setSelected(target: ScheduleTarget) {
         context.dataStore.edit { it[selectedKey] = gson.toJson(target) }
     }
 
-    suspend fun setRefreshOnLaunch(enabled: Boolean) {
-        context.dataStore.edit { it[refreshOnLaunchKey] = enabled }
-    }
-
     suspend fun toggleFavorite(target: ScheduleTarget) {
         context.dataStore.edit { prefs ->
             val current = decodeFavorites(prefs[favoritesKey]).toMutableList()
             val index = current.indexOfFirst { it.id == target.id && it.type == target.type }
-            if (index >= 0) current.removeAt(index) else current.add(target)
+            if (index >= 0) {
+                current.removeAt(index)
+                val names = decodeFavoriteNames(prefs[favoriteNamesKey]).toMutableMap()
+                names.remove(target.favoriteKey())
+                prefs[favoriteNamesKey] = gson.toJson(names)
+            } else {
+                current.add(target)
+            }
             prefs[favoritesKey] = gson.toJson(current)
         }
+    }
+
+    suspend fun renameFavorite(target: ScheduleTarget, name: String) {
+        context.dataStore.edit { prefs ->
+            if (decodeFavorites(prefs[favoritesKey]).none {
+                it.favoriteKey() == target.favoriteKey()
+            }) return@edit
+            val names = decodeFavoriteNames(prefs[favoriteNamesKey]).toMutableMap()
+            val trimmed = name.trim()
+            if (trimmed.isBlank() || trimmed == target.name) {
+                names.remove(target.favoriteKey())
+            } else {
+                names[target.favoriteKey()] = trimmed.take(80)
+            }
+            prefs[favoriteNamesKey] = gson.toJson(names)
+        }
+    }
+
+    private fun decodeFavoriteNames(raw: String?): Map<String, String> {
+        if (raw.isNullOrBlank()) return emptyMap()
+        val type = object : TypeToken<Map<String, String>>() {}.type
+        return runCatching { gson.fromJson<Map<String, String>>(raw, type) }
+            .getOrNull().orEmpty().filterValues { !it.isNullOrBlank() }
     }
 
     private fun decodeFavorites(raw: String?): List<ScheduleTarget> {

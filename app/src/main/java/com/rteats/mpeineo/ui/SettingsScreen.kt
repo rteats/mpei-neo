@@ -20,7 +20,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ContainedLoadingIndicator
@@ -30,7 +29,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -51,9 +49,7 @@ import com.rteats.mpeineo.R
 
 @Composable
 internal fun SettingsScreen(
-    state: MainUiState,
     updateViewModel: UpdateViewModel,
-    onRefreshOnLaunchChanged: (Boolean) -> Unit,
     onClearCache: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -89,42 +85,9 @@ internal fun SettingsScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 112.dp),
+            .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    Icons.Default.Refresh,
-                    contentDescription = null,
-                )
-                Column(
-                    modifier = Modifier
-                        .padding(horizontal = 14.dp)
-                        .weight(1f),
-                ) {
-                    Text(
-                        "Обновлять расписание при запуске",
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        "Если выключено, приложение использует кэш до обновления жестом вниз.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(
-                    checked = state.refreshOnLaunch,
-                    onCheckedChange = onRefreshOnLaunchChanged,
-                )
-            }
-        }
-
         UpdateCard(
             state = updateState,
             onCheck = updateViewModel::checkForUpdates,
