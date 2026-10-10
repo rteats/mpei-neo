@@ -99,7 +99,7 @@ internal fun calculateGradeForecast(
 
     // Search future grades in ascending order. Prune any branch whose
     // best-case completion cannot reach the threshold; stop once 30
-    // combinations are found rather than exploring 4^N possibilities.
+    // combinations are found rather than exploring 3^N possibilities.
     val suffixMax = DoubleArray(missing.size + 1)
     for (i in missing.lastIndex downTo 0) {
         suffixMax[i] = suffixMax[i + 1] + missing[i].weight * 5.0
@@ -120,7 +120,7 @@ internal fun calculateGradeForecast(
             }
             return
         }
-        for (grade in 2..5) {
+        for (grade in 3..5) {
             trial[index] = grade
             solve(index + 1, sum + grade * missing[index].weight)
             if (truncated) return

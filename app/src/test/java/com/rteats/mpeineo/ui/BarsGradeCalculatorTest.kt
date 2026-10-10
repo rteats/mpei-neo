@@ -38,6 +38,7 @@ class BarsGradeCalculatorTest {
         assertTrue(result.combinations.isNotEmpty())
         assertTrue(result.combinations.all { it.weightedSum >= 4.2 - 1e-8 })
         assertTrue(result.combinations.all { it.marks.size == 2 })
+        assertTrue(result.combinations.all { combination -> combination.marks.all { it in 3..5 } })
     }
 
     @Test fun impossibleThresholdIsNotPresentedAsPassing() {

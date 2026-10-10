@@ -1356,46 +1356,31 @@ private fun GradeForecastDropdown(
                             )
                         } else {
                             Text(
-                                "Варианты оценок за оставшиеся мероприятия (2–5):",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
+                                "Варианты (3–5) · порядок: " +
+                                    result.remaining.joinToString(" → ") { it.name },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            result.combinations.forEachIndexed { index, combination ->
-                                Surface(
-                                    shape = MaterialTheme.shapes.medium,
-                                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            result.combinations.forEach { combination ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth()
+                                        .padding(horizontal = 4.dp, vertical = 5.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                                    ) {
-                                        Text(
-                                            "Вариант ${index + 1} · " +
-                                                formatBarsWeightedSum(combination.weightedSum) +
-                                                " ≥ 4,2",
-                                            style = MaterialTheme.typography.labelLarge,
-                                            fontWeight = FontWeight.SemiBold,
-                                        )
-                                        result.remaining.forEachIndexed { slotIndex, slot ->
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                            ) {
-                                                Text(
-                                                    "${slot.name} (×${formatBarsWeightedSum(slot.weight)})",
-                                                    modifier = Modifier.weight(1f),
-                                                    maxLines = 2,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                )
-                                                GradeChip(
-                                                    combination.marks[slotIndex].toString(),
-                                                    combination.marks[slotIndex].toFloat(),
-                                                )
-                                            }
-                                        }
-                                    }
+                                    Text(
+                                        combination.marks.joinToString("  ·  "),
+                                        modifier = Modifier.weight(1f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium,
+                                    )
+                                    Text(
+                                        formatBarsWeightedSum(combination.weightedSum),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
                                 }
                             }
                             if (result.truncated) {
