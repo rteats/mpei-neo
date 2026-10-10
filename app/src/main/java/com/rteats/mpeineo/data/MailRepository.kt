@@ -39,6 +39,7 @@ data class MailSummary(
     val unread: Boolean,
     val hasAttachment: Boolean,
 )
+data class MailInboxSnapshot(val uidValidity: Long, val messages: List<MailSummary>)
 data class MailAttachment(
     val name: String,
     val mimeType: String,
@@ -143,10 +144,18 @@ class MailRepository(private val context: Context) {
     }
 
     suspend fun listInbox(auth: MailCredentials, maxMessages: Int = 60): List<MailSummary> =
+        inboxSnapshot(auth, maxMessages).messages
+
+    /**
+     * Includes UIDVALIDITY even for an empty inbox, allowing the background
+     * notification worker to establish a baseline before the first email.
+     */
+    suspend fun inboxSnapshot(auth: MailCredentials, maxMessages: Int = 60): MailInboxSnapshot =
         withContext(Dispatchers.IO) {
             withInbox(auth) { folder ->
+                val validity = folder.uidValidity
                 val total = folder.messageCount
-                if (total <= 0) return@withInbox emptyList()
+                if (total <= 0) return@withInbox MailInboxSnapshot(validity, emptyList())
                 val messages = folder.getMessages((total - maxMessages + 1).coerceAtLeast(1), total)
                 val fp = FetchProfile().apply {
                     add(FetchProfile.Item.ENVELOPE)
@@ -155,10 +164,10 @@ class MailRepository(private val context: Context) {
                     add("Content-Disposition")
                 }
                 folder.fetch(messages, fp)
-                messages.reversed().map { message ->
+                val items = messages.reversed().map { message ->
                     MailSummary(
                         uid = folder.getUID(message),
-                        uidValidity = folder.uidValidity,
+                        uidValidity = validity,
                         sender = sender(message),
                         subject = message.subject.orEmpty(),
                         sentAt = (message.receivedDate ?: message.sentDate ?: Date()).time,
@@ -166,6 +175,7 @@ class MailRepository(private val context: Context) {
                         hasAttachment = message.contentType?.contains("multipart", true) == true,
                     )
                 }
+                MailInboxSnapshot(validity, items)
             }
         }
 
