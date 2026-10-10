@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.lazy.LazyColumn
@@ -1357,11 +1358,31 @@ private fun GradeForecastDropdown(
                     }
                     is GradeForecast.Available -> {
                         Text(
-                            "Текущая сумма: ${formatBarsWeightedSum(result.currentSum)}  ·  " +
+                            "Учтено из БАРС: ${formatBarsWeightedSum(result.currentSum)}  ·  " +
                                 "Σ весов: ${formatBarsWeightedSum(result.totalWeight)}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        if (result.completed.isNotEmpty()) {
+                            Text(
+                                "Уже выставлены (не изменяются):",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                result.completed.forEach { slot ->
+                                    slot.currentMark?.let { mark ->
+                                        GradeChip(
+                                            text = "${slot.name}: ${formatBarsGrade(mark)}",
+                                            mark = mark.toFloat(),
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         if (result.totalWeight < 0.999) {
                             Text(
                                 "Сумма известных весов меньше 1. Учитываются только " +
@@ -1388,8 +1409,12 @@ private fun GradeForecastDropdown(
                             )
                         } else {
                             Text(
-                                "Варианты (3–5) · порядок: " +
-                                    result.remaining.joinToString(" → ") { it.name },
+                                "Минимально необходимые оценки (3–5):",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                "Порядок: " + result.remaining.joinToString(" → ") { it.name },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -1400,31 +1425,39 @@ private fun GradeForecastDropdown(
                                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
+                                    Row(
+                                        modifier = Modifier.weight(1f)
+                                            .horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        combination.marks.forEach { grade ->
+                                            GradeChip(
+                                                text = grade.toString(),
+                                                mark = grade.toFloat(),
+                                            )
+                                        }
+                                    }
                                     Text(
-                                        combination.marks.joinToString("  ·  "),
-                                        modifier = Modifier.weight(1f),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium,
-                                    )
-                                    Text(
-                                        formatBarsWeightedSum(combination.weightedSum),
+                                        "= " + formatBarsWeightedSum(combination.weightedSum),
                                         style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.primary,
                                     )
                                 }
                             }
                             if (result.truncated) {
                                 Text(
-                                    "Показаны первые 30 подходящих сочетаний.",
+                                    "Показаны только наиболее экономные варианты.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
                         Text(
-                            "Прогноз: Σ(оценка × вес) ≥ 4,2. " +
+                            "Учитываются существующие оценки и веса КМ. " +
+                                "Показан наименьший достижимый итог ≥ 4,2; " +
+                                "при равенстве предпочтительны более низкие оценки. " +
                                 "Он не изменяет оценки БАРС и не учитывает " +
                                 "правила выставления итоговой оценки преподавателем.",
                             style = MaterialTheme.typography.bodySmall,
@@ -1531,6 +1564,10 @@ private fun AssessmentTypeChip(
         )
     }
 }
+
+@Composable
+private fun formatBarsGrade(mark: Double): String =
+    if (mark % 1.0 == 0.0) mark.toInt().toString() else formatBarsWeightedSum(mark)
 
 @Composable
 private fun GradeChip(
