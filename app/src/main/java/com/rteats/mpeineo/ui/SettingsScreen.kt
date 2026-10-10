@@ -78,14 +78,21 @@ import com.rteats.mpeineo.data.MailNotificationScheduler
  * switches/actions. Original Compose implementation using Material You colors.
  */
 @Composable
-private fun SettingsBadge(iconRes: Int, inverted: Boolean = false) {
+private fun SettingsBadge(
+    iconRes: Int,
+    inverted: Boolean = false,
+    neutralIcon: Boolean = false,
+) {
     Surface(
         modifier = Modifier.size(44.dp),
         shape = CircleShape,
         color = if (inverted) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.surfaceContainerLow,
-        contentColor = if (inverted) MaterialTheme.colorScheme.onPrimary
-            else MaterialTheme.colorScheme.primary,
+        contentColor = when {
+            inverted -> MaterialTheme.colorScheme.onPrimary
+            neutralIcon -> MaterialTheme.colorScheme.onSurface
+            else -> MaterialTheme.colorScheme.primary
+        },
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(painterResource(iconRes), contentDescription = null,
@@ -484,7 +491,8 @@ private fun UpdateCard(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                SettingsBadge(R.drawable.ic_settings_update, inverted = true)
+                // A neutral action icon, not a second active-section badge.
+                SettingsBadge(R.drawable.ic_settings_update, neutralIcon = true)
                 Column(
                     modifier = Modifier
                         .padding(start = 14.dp)
