@@ -67,6 +67,9 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
             application.container.barsNetworkDiagnostics,
         ),
     )
+    val mailViewModel: MailViewModel = composeViewModel(
+        factory = MailViewModel.factory(application.container.mailRepository),
+    )
     val updateViewModel: UpdateViewModel = composeViewModel(
         factory = UpdateViewModel.factory(application.container),
     )
@@ -190,9 +193,8 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
                         modifier = Modifier.fillMaxSize(),
                     )
 
-                    AppTab.MAIL -> WebPortalScreen(
-                        url = "https://mail.mpei.ru/owa",
-                        testTag = "portal-mail",
+                    AppTab.MAIL -> MailScreen(
+                        viewModel = mailViewModel,
                         modifier = Modifier.fillMaxSize(),
                     )
 

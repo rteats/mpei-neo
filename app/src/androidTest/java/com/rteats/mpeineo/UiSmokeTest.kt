@@ -44,7 +44,7 @@ class UiSmokeTest {
             .performClick()
 
         composeRule
-            .onNodeWithTag("portal-mail")
+            .onNodeWithTag("mail-inbox")
             .assertIsDisplayed()
 
         composeRule

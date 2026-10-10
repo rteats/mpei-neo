@@ -6,6 +6,7 @@ import com.rteats.mpeineo.data.BarsNetworkDiagnostics
 import com.rteats.mpeineo.data.DiagnosticLog
 import com.rteats.mpeineo.data.FileScheduleCache
 import com.rteats.mpeineo.data.GithubUpdateRepository
+import com.rteats.mpeineo.data.MailRepository
 import com.rteats.mpeineo.data.MpeiScheduleRemote
 import com.rteats.mpeineo.data.ScheduleRepository
 import com.rteats.mpeineo.data.UserPreferences
@@ -42,6 +43,7 @@ class AppContainer(application: Application) {
         .build()
 
     val diagnostics = DiagnosticLog(application)
+    val mailRepository = MailRepository(application)
     val barsNetworkDiagnostics = BarsNetworkDiagnostics(application, diagnostics)
     val preferences = UserPreferences(application, gson)
     val updater = GithubUpdateRepository(

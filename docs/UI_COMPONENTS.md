@@ -48,3 +48,23 @@ missing or inconsistent weights are not silently guessed. It keeps existing
 grades fixed, explores future values 2–5 and lists up to 30 combinations
 which meet a weighted sum of at least 4.2. The sum, known weight total, and
 limitations are visible. Forecasts are local and never modify BARS grades.
+
+## Native MPEI IMAP inbox
+
+The Mail tab shows a native read-only inbox over IMAPS, host `mail.mpei.ru`,
+port `993`, with mandatory TLS certificate/hostname checks. The account
+uses the same IMAP username and password as FairEmail, entered locally in the
+app (never in project source). Credentials are AES-GCM encrypted with an
+Android Keystore key; the app does not send email or require SMTP.
+
+INBOX is opened READ_ONLY and IMAP peek mode is enabled so opening a message
+does not change its read flag. The latest 60 messages show their sender,
+subject, date, and existing server unread state. Opening one decodes MIME
+text/plain (with HTML-to-text fallback), highlights HTTP(S) links handled by
+Android's default browser, and lists MIME attachments. Tapping an attachment
+streams it to `Downloads/MPEI Neo` via MediaStore on Android 10+, with no
+storage permission. Pull-to-refresh reloads the inbox and keeps the current
+session's list in ViewModel memory during tab navigation. OWA remains a
+fallback through the globe action. Native swiping is disabled on the Mail tab
+while email content is shown to avoid conflicts with text selection; narrow
+edge swipes still allow switching destinations.
