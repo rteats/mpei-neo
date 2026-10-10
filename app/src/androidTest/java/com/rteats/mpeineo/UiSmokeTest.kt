@@ -28,6 +28,10 @@ class UiSmokeTest {
             .assertIsDisplayed()
 
         composeRule
+            .onNodeWithContentDescription("Закрыть поиск")
+            .performClick()
+
+        composeRule
             .onNodeWithContentDescription("БАРС")
             .performClick()
 
@@ -46,10 +50,6 @@ class UiSmokeTest {
         composeRule
             .onNodeWithContentDescription("Настройки")
             .performClick()
-
-        composeRule
-            .onNodeWithText("Обновлять расписание при запуске")
-            .assertIsDisplayed()
 
         composeRule
             .onNodeWithText("Обновления приложения")

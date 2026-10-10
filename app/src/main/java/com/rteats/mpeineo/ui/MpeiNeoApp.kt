@@ -7,7 +7,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -21,7 +25,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ShortNavigationBar
 import androidx.compose.material3.ShortNavigationBarArrangement
 import androidx.compose.material3.ShortNavigationBarItem
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -31,6 +34,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.painterResource
 import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
 import com.rteats.mpeineo.MpeiNeoApplication
@@ -39,8 +45,8 @@ import com.rteats.mpeineo.R
 private enum class AppTab { SCHEDULE, BARS, MAIL, SETTINGS }
 
 /**
- * Material 3 Expressive short navigation bar with horizontal icon-and-label
- * items. EqualWeight keeps four short labels legible on narrow phones.
+ * Material 3 Expressive short navigation bar with four centered icon-only
+ * destinations. Schedule search floats directly above the navigation bar.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -59,11 +65,14 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
         factory = UpdateViewModel.factory(application.container),
     )
     val barsState by barsViewModel.state.collectAsState()
+    val state by viewModel.state.collectAsState()
+    val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            ShortNavigationBar(
+            if (!keyboardVisible) ShortNavigationBar(
                 arrangement = ShortNavigationBarArrangement.EqualWeight,
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
             ) {
@@ -75,8 +84,8 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
                         todayJumpRequest++
                     },
                     iconPosition = NavigationItemIconPosition.Start,
-                    icon = { Icon(Icons.Default.DateRange, contentDescription = null) },
-                    label = { Text("Пары", maxLines = 1) },
+                    icon = { Icon(Icons.Default.DateRange, contentDescription = "Расписание") },
+                    label = {},
                 )
                 ShortNavigationBarItem(
                     selected = tab == AppTab.BARS,
@@ -90,20 +99,15 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
                     iconPosition = NavigationItemIconPosition.Start,
                     icon = {
                         if (tab == AppTab.BARS && barsState.browserVisible) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Вернуться к оценкам")
                         } else {
                             Icon(
                                 painter = painterResource(R.drawable.ic_nav_bars),
-                                contentDescription = null,
+                                contentDescription = "БАРС",
                             )
                         }
                     },
-                    label = {
-                        Text(
-                            if (tab == AppTab.BARS && barsState.browserVisible) "Оценки" else "БАРС",
-                            maxLines = 1,
-                        )
-                    },
+                    label = {},
                 )
                 ShortNavigationBarItem(
                     selected = tab == AppTab.MAIL,
@@ -112,31 +116,51 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_nav_mail),
-                            contentDescription = null,
+                            contentDescription = "Почта",
                         )
                     },
-                    label = { Text("Почта", maxLines = 1) },
+                    label = {},
                 )
                 ShortNavigationBarItem(
                     selected = tab == AppTab.SETTINGS,
                     onClick = { tab = AppTab.SETTINGS },
                     iconPosition = NavigationItemIconPosition.Start,
-                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                    label = { Text("Опции", maxLines = 1) },
+                    icon = { Icon(Icons.Default.Settings, contentDescription = "Настройки") },
+                    label = {},
                 )
             }
         },
     ) { innerPadding ->
-        AppContent(
-            viewModel = viewModel,
-            barsViewModel = barsViewModel,
-            updateViewModel = updateViewModel,
-            tab = tab,
-            todayJumpRequest = todayJumpRequest,
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
-        )
+        ) {
+            AppContent(
+                viewModel = viewModel,
+                barsViewModel = barsViewModel,
+                updateViewModel = updateViewModel,
+                tab = tab,
+                todayJumpRequest = todayJumpRequest,
+                modifier = Modifier
+                    .fillMaxSize()
+                    // Reserve only the small input row; the suggestions panel
+                    // is an overlay above it and never shifts the timeline.
+                    .padding(bottom = if (tab == AppTab.SCHEDULE) 76.dp else 0.dp),
+            )
+            if (tab == AppTab.SCHEDULE) {
+                ScheduleDockedSearch(
+                    state = state,
+                    onQueryChanged = viewModel::updateSearchQuery,
+                    onTypeChanged = viewModel::setSearchType,
+                    onSearch = viewModel::search,
+                    onSelect = viewModel::selectTarget,
+                    onToggleFavorite = viewModel::toggleFavorite,
+                    onRenameFavorite = viewModel::renameFavorite,
+                    modifier = Modifier.fillMaxSize().align(Alignment.BottomCenter),
+                )
+            }
+        }
     }
 }
 
@@ -171,12 +195,6 @@ private fun AppContent(
         when (targetTab) {
             AppTab.SCHEDULE -> ScheduleScreen(
                 state = state,
-                onSelect = viewModel::selectTarget,
-                onToggleFavorite = viewModel::toggleFavorite,
-                onRenameFavorite = viewModel::renameFavorite,
-                onQueryChanged = viewModel::updateSearchQuery,
-                onTypeChanged = viewModel::setSearchType,
-                onSearch = viewModel::search,
                 onEnsureAgendaWeek = viewModel::ensureAgendaWeek,
                 onRefreshAgendaWeek = viewModel::refreshAgendaWeek,
                 onRetryAgendaWeek = viewModel::retryAgendaWeek,
