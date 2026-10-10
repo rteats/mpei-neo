@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
@@ -119,9 +119,9 @@ internal fun ScheduleAgenda(
     ) { displayedWeek ->
         val weekStart = monday.plusWeeks(displayedWeek.toLong())
         val weekEnd = weekStart.plusDays(6)
-        val listState = remember(displayedWeek, selectedId, selectedType, todayJumpRequest) {
-            LazyListState(initialFirstVisibleItemIndex = entryDay.coerceIn(0, 6) * 2)
-        }
+        val listState = rememberLazyListState(
+            initialFirstVisibleItemIndex = entryDay.coerceIn(0, 6) * 2,
+        )
         var overscroll by remember(displayedWeek) { mutableFloatStateOf(0f) }
 
         val overscrollConnection = remember(
