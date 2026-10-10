@@ -124,10 +124,11 @@ internal fun ScheduleAgenda(
         }
         var overscroll by remember(displayedWeek) { mutableFloatStateOf(0f) }
 
-        val overscrollConnection = remember(displayedWeek, overscrollThreshold, overscrollMax) {
+        val overscrollConnection = remember(
+            displayedWeek, listState, overscrollThreshold, overscrollMax,
+        ) {
             object : NestedScrollConnection {
-                override fun onPostScroll(
-                    consumed: Offset,
+                override fun onPreScroll(
                     available: Offset,
                     source: NestedScrollSource,
                 ): Offset {
@@ -135,10 +136,17 @@ internal fun ScheduleAgenda(
                         source != NestedScrollSource.UserInput || available.y == 0f
                     ) return Offset.Zero
 
-                    // Ignore a reversed drag until the prior edge displacement
-                    // has returned to zero. Avoid switching twice in one gesture.
-                    overscroll = (overscroll + available.y)
-                        .coerceIn(-overscrollMax, overscrollMax)
+                    // Check the LazyColumn's *actual* scroll boundaries before
+                    // overscroll effects consume the remaining pointer movement.
+                    // In-week vertical scrolling is never intercepted.
+                    val atPreviousEdge = available.y > 0f && !listState.canScrollBackward
+                    val atNextEdge = available.y < 0f && !listState.canScrollForward
+                    if (atPreviousEdge || atNextEdge) {
+                        overscroll = (overscroll + available.y)
+                            .coerceIn(-overscrollMax, overscrollMax)
+                    } else {
+                        overscroll = 0f
+                    }
                     return Offset.Zero
                 }
 
