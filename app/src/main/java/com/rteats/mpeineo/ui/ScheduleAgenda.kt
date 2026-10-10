@@ -233,7 +233,10 @@ internal fun ScheduleAgenda(
                     Surface(
                         modifier = Modifier.align(
                             if (previous) Alignment.TopCenter else Alignment.BottomCenter,
-                        ).padding(8.dp),
+                        ).padding(
+                            start = 8.dp, end = 8.dp,
+                            top = 8.dp, bottom = if (previous) 8.dp else 138.dp,
+                        ),
                         shape = RoundedCornerShape(24.dp),
                         color = MaterialTheme.colorScheme.secondaryContainer,
                     ) {

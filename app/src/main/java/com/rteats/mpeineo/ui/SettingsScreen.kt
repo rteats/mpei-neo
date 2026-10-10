@@ -215,12 +215,26 @@ internal fun SettingsScreen(
     val mailState by mailViewModel.state.collectAsState()
     val updateState by updateViewModel.state.collectAsState()
 
-    // One scrollable screen; each category expands inline rather than navigating.
-    var mailExpanded by rememberSaveable { mutableStateOf(true) }
-    var updatesExpanded by rememberSaveable { mutableStateOf(false) }
-    var storageExpanded by rememberSaveable { mutableStateOf(false) }
-    var logsExpanded by rememberSaveable { mutableStateOf(false) }
-    var aboutExpanded by rememberSaveable { mutableStateOf(false) }
+    // Stored per installed app, surviving process death and package updates.
+    // RememberSaveable alone only survives saved Activity state.
+    val sectionPrefs = remember(context) {
+        context.getSharedPreferences("settings_sections", Context.MODE_PRIVATE)
+    }
+    var mailExpanded by remember { mutableStateOf(sectionPrefs.getBoolean("mail", true)) }
+    var updatesExpanded by remember { mutableStateOf(sectionPrefs.getBoolean("updates", false)) }
+    var storageExpanded by remember { mutableStateOf(sectionPrefs.getBoolean("storage", false)) }
+    var logsExpanded by remember { mutableStateOf(sectionPrefs.getBoolean("logs", false)) }
+    var aboutExpanded by remember { mutableStateOf(sectionPrefs.getBoolean("about", false)) }
+    fun changeSection(key: String, next: Boolean) {
+        sectionPrefs.edit().putBoolean(key, next).apply()
+        when (key) {
+            "mail" -> mailExpanded = next
+            "updates" -> updatesExpanded = next
+            "storage" -> storageExpanded = next
+            "logs" -> logsExpanded = next
+            "about" -> aboutExpanded = next
+        }
+    }
     var copied by remember { mutableStateOf(false) }
     var cacheCleared by remember { mutableStateOf(false) }
     var notificationError by remember { mutableStateOf<String?>(null) }
@@ -293,7 +307,7 @@ internal fun SettingsScreen(
                 "Почта МЭИ",
                 if (mailState.configured) mailState.username else "Аккаунт не подключён",
                 R.drawable.ic_nav_mail,
-                mailExpanded, { mailExpanded = !mailExpanded },
+                mailExpanded, { changeSection("mail", !mailExpanded) },
             ) {
                 SettingsSwitchRow(
                     "Уведомления о новых письмах",
@@ -355,7 +369,7 @@ internal fun SettingsScreen(
                 "Обновления приложения",
                 "Версия " + BuildConfig.VERSION_NAME + " · канал " + BuildConfig.UPDATE_CHANNEL,
                 R.drawable.ic_settings_update,
-                updatesExpanded, { updatesExpanded = !updatesExpanded },
+                updatesExpanded, { changeSection("updates", !updatesExpanded) },
             ) {
                 UpdateCard(updateState, updateViewModel::checkForUpdates,
                     updateViewModel::downloadUpdate, ::installDownloadedUpdate)
@@ -366,7 +380,7 @@ internal fun SettingsScreen(
                 "Локальный кэш",
                 "Расписание доступно без сети",
                 R.drawable.ic_settings_update,
-                storageExpanded, { storageExpanded = !storageExpanded },
+                storageExpanded, { changeSection("storage", !storageExpanded) },
             ) {
                 SettingsAction(
                     if (cacheCleared) "Кэш очищен" else "Очистить кэш",
@@ -381,7 +395,7 @@ internal fun SettingsScreen(
                 "Диагностика",
                 "Копирование и очистка журнала",
                 R.drawable.ic_settings_diagnostics,
-                logsExpanded, { logsExpanded = !logsExpanded },
+                logsExpanded, { changeSection("logs", !logsExpanded) },
             ) {
                 SettingsAction(
                     if (copied) "Скопировано" else "Копировать журнал",
@@ -412,7 +426,7 @@ internal fun SettingsScreen(
                 "О приложении",
                 "MPEI Neo · " + BuildConfig.VERSION_NAME,
                 R.drawable.ic_nav_bars,
-                aboutExpanded, { aboutExpanded = !aboutExpanded },
+                aboutExpanded, { changeSection("about", !aboutExpanded) },
             ) {
                 Text(
                     "MPEI Neo " + BuildConfig.VERSION_NAME + " (" +
@@ -462,22 +476,15 @@ private fun UpdateCard(
     onDownload: () -> Unit,
     onInstall: () -> Unit,
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = MaterialTheme.shapes.large,
+    Column(
+        modifier = Modifier.fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_settings_update),
-                    contentDescription = null,
-                )
+                SettingsBadge(R.drawable.ic_settings_update, inverted = true)
                 Column(
                     modifier = Modifier
                         .padding(start = 14.dp)
@@ -609,6 +616,5 @@ private fun UpdateCard(
                     }
                 }
             }
-        }
     }
 }

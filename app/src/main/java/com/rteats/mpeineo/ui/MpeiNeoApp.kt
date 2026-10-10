@@ -175,6 +175,7 @@ fun MpeiNeoApp(viewModel: MainViewModel, initialMailTab: Boolean = false) {
             state = pager,
             modifier = Modifier.fillMaxSize().padding(innerPadding),
             userScrollEnabled = nativeSwipeAllowed,
+            beyondViewportPageCount = 3,
             key = { AppTab.entries[it].name },
         ) { page ->
             val destination = AppTab.entries[page]

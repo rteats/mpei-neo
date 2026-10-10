@@ -117,13 +117,20 @@ internal fun BarsScreen(
     // Only establish a connection while its tab is settled/visible. Once loaded,
     // retain the same WebView for the entire visible BARS session, even when the
     // extracted grades are cached, instead of destroying it after extraction.
-    val shouldHaveWebView = active && (
-        webView != null ||
-            state.authStage != BarsAuthStage.AUTHENTICATED ||
+    val shouldHaveWebView = webView != null || (active && (
+        state.authStage != BarsAuthStage.AUTHENTICATED ||
             state.browserVisible ||
             state.isLoading ||
             !cacheFresh
-        )
+        ))
+
+    // The WebView remains mounted when switching to Mail/Settings. Suspend
+    // page activity while hidden, but do not destroy its session or JS bridge.
+    androidx.compose.runtime.LaunchedEffect(active, webView) {
+        webView?.let { view ->
+            if (active) view.onResume() else view.onPause()
+        }
+    }
 
     BackHandler(enabled = active && state.browserVisible) {
         val view = webView
