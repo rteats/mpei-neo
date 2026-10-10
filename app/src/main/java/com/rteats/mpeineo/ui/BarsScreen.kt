@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ContainedLoadingIndicator
@@ -72,11 +73,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.rotate
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -943,58 +946,57 @@ private fun BarsNativeDashboard(
  * Expressive BARS dashboard: dominant profile surface + factual semester
  * summary + approachable, interactive discipline cards.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun BarsUserHeader(
     state: BarsUiState,
     onOpenBrowser: () -> Unit,
 ) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    // A typographic section heading rather than another vivid card.
+    Column(
+        modifier = Modifier.fillMaxWidth()
+            .padding(start = 22.dp, end = 22.dp, top = 20.dp, bottom = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+        Text(
+            text = "МОЙ БАРС",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = state.profileName.ifBlank { "БАРС МЭИ" },
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        if (state.profileGroup.isNotBlank() || state.semester.isNotBlank()) {
+            Text(
+                text = listOf(state.profileGroup, state.semester)
+                    .filter { it.isNotBlank() }.joinToString(" · "),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        val buttonHeight = ButtonDefaults.MediumContainerHeight
+        Button(
+            onClick = onOpenBrowser,
+            modifier = Modifier.padding(top = 12.dp).heightIn(min = buttonHeight),
+            contentPadding = ButtonDefaults.contentPaddingFor(
+                buttonHeight, hasEndIcon = true,
+            ),
+            shapes = ButtonDefaults.shapes(),
         ) {
-            Text(
-                text = "МОЙ БАРС",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
+            Text("БАРС", style = ButtonDefaults.textStyleFor(buttonHeight))
+            Spacer(Modifier.size(ButtonDefaults.iconSpacingFor(buttonHeight)))
+            Icon(
+                Icons.Default.ArrowForward,
+                contentDescription = null,
+                modifier = Modifier.size(ButtonDefaults.iconSizeFor(buttonHeight))
+                    .rotate(-45f),
             )
-            Text(
-                text = state.profileName.ifBlank { "БАРС МЭИ" },
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (state.profileGroup.isNotBlank()) {
-                Text(
-                    text = state.profileGroup,
-                    style = MaterialTheme.typography.titleSmall,
-                )
-            }
-            if (state.semester.isNotBlank()) {
-                Text(
-                    text = state.semester,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-            FilledTonalButton(
-                onClick = onOpenBrowser,
-                modifier = Modifier.padding(top = 8.dp),
-            ) {
-                Text("Открыть БАРС")
-                Spacer(Modifier.size(8.dp))
-                androidx.compose.material3.Icon(
-                    Icons.Default.ArrowForward,
-                    contentDescription = null,
-                )
-            }
         }
     }
 }
@@ -1587,6 +1589,7 @@ private fun GradeChip(
             text = text,
             modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
             style = MaterialTheme.typography.labelMedium,
+            fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.SemiBold,
         )
     }
@@ -1605,6 +1608,7 @@ private fun NeutralChip(
             text = text,
             modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
             style = MaterialTheme.typography.labelMedium,
+            fontFamily = FontFamily.Monospace,
         )
     }
 }
