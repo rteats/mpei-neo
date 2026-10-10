@@ -105,6 +105,7 @@ class MailCredentialsStore(private val context: Context) {
  * does not mark messages read. Each operation uses a fresh, short-lived session.
  */
 class MailRepository(private val context: Context) {
+    val contextForNotifications: Context get() = context.applicationContext
     val credentials = MailCredentialsStore(context)
     private val tls = MailTlsTrust(context)
 

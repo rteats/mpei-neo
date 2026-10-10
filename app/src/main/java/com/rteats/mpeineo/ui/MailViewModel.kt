@@ -7,6 +7,7 @@ import com.rteats.mpeineo.data.MailAttachment
 import com.rteats.mpeineo.data.MailCredentials
 import com.rteats.mpeineo.data.MailDetail
 import com.rteats.mpeineo.data.MailRepository
+import com.rteats.mpeineo.data.MailNotificationScheduler
 import com.rteats.mpeineo.data.MailSummary
 import com.rteats.mpeineo.data.MailServerCertificate
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -120,6 +121,7 @@ internal class MailViewModel(private val repository: MailRepository) : ViewModel
     }
 
     fun logout() {
+        MailNotificationScheduler.stopAndClear(repository.contextForNotifications)
         repository.credentials.clear()
         repository.forgetTrustedCertificate()
         attemptedCredentials = null

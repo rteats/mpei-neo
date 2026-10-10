@@ -58,7 +58,7 @@ private enum class AppTab { SCHEDULE, BARS, MAIL, SETTINGS }
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun MpeiNeoApp(viewModel: MainViewModel) {
+fun MpeiNeoApp(viewModel: MainViewModel, initialMailTab: Boolean = false) {
     val application = LocalContext.current.applicationContext as MpeiNeoApplication
     val barsViewModel: BarsViewModel = composeViewModel(
         factory = BarsViewModel.factory(
@@ -74,7 +74,10 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
     )
     val barsState by barsViewModel.state.collectAsState()
     val scheduleState by viewModel.state.collectAsState()
-    val pager = rememberPagerState(initialPage = 0, pageCount = { AppTab.entries.size })
+    val pager = rememberPagerState(
+        initialPage = if (initialMailTab) AppTab.MAIL.ordinal else 0,
+        pageCount = { AppTab.entries.size },
+    )
     val scope = rememberCoroutineScope()
     val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     var todayJumpRequest by rememberSaveable { mutableIntStateOf(0) }

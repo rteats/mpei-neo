@@ -10,6 +10,7 @@ import com.rteats.mpeineo.ui.MpeiNeoApp
 import com.rteats.mpeineo.ui.theme.MpeiNeoTheme
 
 class MainActivity : ComponentActivity() {
+    companion object { const val EXTRA_OPEN_MAIL = "open_mpei_mail" }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -17,7 +18,7 @@ class MainActivity : ComponentActivity() {
             MpeiNeoTheme {
                 val application = application as MpeiNeoApplication
                 val viewModel: MainViewModel = viewModel(factory = MainViewModel.factory(application.container))
-                MpeiNeoApp(viewModel)
+                MpeiNeoApp(viewModel, initialMailTab = intent.getBooleanExtra(EXTRA_OPEN_MAIL, false))
             }
         }
     }
