@@ -203,6 +203,7 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
                         updateViewModel = updateViewModel,
                         mailViewModel = mailViewModel,
                         onClearCache = viewModel::clearCache,
+                        active = pager.currentPage == page,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
