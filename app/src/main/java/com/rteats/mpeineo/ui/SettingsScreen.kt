@@ -8,6 +8,16 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -47,34 +57,107 @@ import com.rteats.mpeineo.BuildConfig
 import com.rteats.mpeineo.MpeiNeoApplication
 import com.rteats.mpeineo.R
 
+
+private enum class SettingsPage { HOME, UPDATE, MAIL, LOGS, STORAGE, ABOUT }
+
+private data class SettingsLink(
+    val title: String,
+    val subtitle: String,
+    val icon: Int,
+    val page: SettingsPage,
+)
+
+/** Tonal grouped rows with accent-circle icons, inspired by EasyNotes' layout. */
+@Composable
+private fun SettingsGroup(
+    links: List<SettingsLink>,
+    onOpen: (SettingsPage) -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = MaterialTheme.shapes.extraLarge,
+    ) {
+        Column {
+            links.forEachIndexed { index, link ->
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .clickable { onOpen(link.page) }
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(link.title, style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold)
+                        Text(link.subtitle, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Surface(
+                        modifier = Modifier.size(48.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(painterResource(link.icon), contentDescription = null,
+                                modifier = Modifier.size(24.dp))
+                        }
+                    }
+                }
+                if (index != links.lastIndex) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsGroupTitle(title: String) {
+    Text(
+        title, color = MaterialTheme.colorScheme.primary,
+        style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(start = 8.dp, top = 12.dp, bottom = 4.dp),
+    )
+}
+
 @Composable
 internal fun SettingsScreen(
     updateViewModel: UpdateViewModel,
     mailViewModel: MailViewModel,
     onClearCache: () -> Unit,
+    active: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
+    var page by remember { mutableStateOf(SettingsPage.HOME) }
     var cacheCleared by remember { mutableStateOf(false) }
     var logCopied by remember { mutableStateOf(false) }
     val updateState by updateViewModel.state.collectAsState()
     val mailState by mailViewModel.state.collectAsState()
     val context = LocalContext.current
-    val application = context.applicationContext as MpeiNeoApplication
-    val diagnostics = application.container.diagnostics
+    val diagnostics = (context.applicationContext as MpeiNeoApplication).container.diagnostics
+    val appName = if (BuildConfig.UPDATE_CHANNEL == "dev") "MPEI Neo Dev" else "MPEI Neo"
 
-    val installPermissionLauncher = rememberLauncherForActivityResult(
+    BackHandler(enabled = active && page != SettingsPage.HOME) {
+        page = SettingsPage.HOME
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult(),
     ) {
         if (context.packageManager.canRequestPackageInstalls()) {
             updateViewModel.installDownloadedUpdate(context)
         }
     }
-
-    fun installDownloadedUpdate() {
+    fun installUpdate() {
         if (context.packageManager.canRequestPackageInstalls()) {
             updateViewModel.installDownloadedUpdate(context)
         } else {
-            installPermissionLauncher.launch(
+            permissionLauncher.launch(
                 Intent(
                     Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                     Uri.parse("package:${context.packageName}"),
@@ -83,175 +166,198 @@ internal fun SettingsScreen(
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        UpdateCard(
-            state = updateState,
-            onCheck = updateViewModel::checkForUpdates,
-            onDownload = updateViewModel::downloadUpdate,
-            onInstall = ::installDownloadedUpdate,
-        )
-
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_nav_mail),
-                        contentDescription = null,
-                    )
-                    Text(
+    if (page == SettingsPage.HOME) {
+        LazyColumn(
+            modifier = modifier.fillMaxSize().testTag("settings-overview"),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                start = 16.dp, end = 16.dp, top = 24.dp, bottom = 36.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item {
+                Text("Настройки", style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold)
+                Text("Приложение, подключения и данные",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium)
+            }
+            item {
+                Surface(
+                    onClick = { page = SettingsPage.UPDATE },
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    shape = MaterialTheme.shapes.extraLarge,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 22.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(appName, style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold)
+                            Text("Версия ${BuildConfig.VERSION_NAME} · обновления",
+                                style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Icon(Icons.Default.ArrowForward, contentDescription = null)
+                    }
+                }
+            }
+            item { SettingsGroupTitle("АККАУНТЫ") }
+            item {
+                SettingsGroup(
+                    listOf(SettingsLink(
                         "Почта МЭИ",
-                        modifier = Modifier.padding(start = 14.dp),
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-                Text(
-                    if (mailState.configured) "Аккаунт IMAP: ${mailState.username}"
-                    else "Аккаунт IMAP не подключён.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        if (mailState.configured) mailState.username else "Аккаунт не подключён",
+                        R.drawable.ic_nav_mail, SettingsPage.MAIL,
+                    )),
+                    onOpen = { page = it },
                 )
-                if (mailState.configured) {
-                    OutlinedButton(onClick = mailViewModel::logout) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_mail_logout),
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(Modifier.size(8.dp))
-                        Text("Выйти из почты")
-                    }
-                }
             }
-        }
-
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_settings_diagnostics),
-                        contentDescription = null,
-                    )
-                    Text(
-                        "Диагностика",
-                        modifier = Modifier.padding(start = 14.dp),
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-                Text(
-                    "Журнал сохраняется между перезапусками и обновлениями. В него не записываются пароли, 2FA-коды, cookie или токены БАРС.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    OutlinedButton(
-                        onClick = {
-                            val text = diagnostics.readText().ifBlank {
-                                "Журнал диагностики пока пуст."
-                            }
-                            val clipboard = context.getSystemService(
-                                Context.CLIPBOARD_SERVICE,
-                            ) as ClipboardManager
-                            clipboard.setPrimaryClip(
-                                ClipData.newPlainText("MPEI Neo diagnostics", text),
-                            )
-                            logCopied = true
-                            diagnostics.log("DIAGNOSTICS", "log copied to clipboard")
-                        },
-                    ) {
-                        Text(if (logCopied) "Скопировано" else "Копировать журнал")
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            diagnostics.clear()
-                            diagnostics.log("DIAGNOSTICS", "log cleared by user")
-                            logCopied = false
-                        },
-                    ) {
-                        Text("Очистить")
-                    }
-                }
-            }
-        }
-
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = null,
-                    )
-                    Text(
-                        "Локальный кэш",
-                        modifier = Modifier.padding(start = 14.dp),
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-                Text(
-                    "Сохранённые недели позволяют смотреть расписание без повторной загрузки и при проблемах с сетью.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(
-                        top = 8.dp,
-                        bottom = 12.dp,
+            item { SettingsGroupTitle("ПРИЛОЖЕНИЕ") }
+            item {
+                SettingsGroup(
+                    listOf(
+                        SettingsLink("Локальный кэш", "Сохранённые недели расписания",
+                            R.drawable.ic_settings_update, SettingsPage.STORAGE),
+                        SettingsLink("Диагностика", "Журнал событий и ошибок",
+                            R.drawable.ic_settings_diagnostics, SettingsPage.LOGS),
                     ),
+                    onOpen = { page = it },
                 )
-                OutlinedButton(
-                    onClick = {
-                        onClearCache()
-                        cacheCleared = true
-                    },
-                ) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = null,
-                    )
-                    Spacer(Modifier.size(8.dp))
-                    Text(
-                        if (cacheCleared) {
-                            "Кэш очищен"
-                        } else {
-                            "Очистить кэш"
-                        },
-                    )
-                }
+            }
+            item { SettingsGroupTitle("ИНФОРМАЦИЯ") }
+            item {
+                SettingsGroup(
+                    listOf(SettingsLink("О приложении", "Версия и конфиденциальность",
+                        R.drawable.ic_nav_bars, SettingsPage.ABOUT)),
+                    onOpen = { page = it },
+                )
             }
         }
-
-        HorizontalDivider()
-
-        Text(
-            "${if (BuildConfig.UPDATE_CHANNEL == "dev") "MPEI Neo Dev" else "MPEI Neo"} ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(
-            "Неофициальный клиент МЭИ. Пароль и 2FA-коды БАРС приложение не сохраняет; аналитики нет.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            "На Android 12+ цвета интерфейса берутся из системной палитры Material You (Monet).",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    } else {
+        val title = when (page) {
+            SettingsPage.UPDATE -> "Обновления"
+            SettingsPage.MAIL -> "Почта МЭИ"
+            SettingsPage.LOGS -> "Диагностика"
+            SettingsPage.STORAGE -> "Локальный кэш"
+            SettingsPage.ABOUT -> "О приложении"
+            SettingsPage.HOME -> "Настройки"
+        }
+        Column(modifier = modifier.fillMaxSize().testTag("settings-detail")) {
+            Row(
+                modifier = Modifier.fillMaxWidth()
+                    .padding(start = 8.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                IconButton(onClick = { page = SettingsPage.HOME }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Вернуться к настройкам")
+                }
+                Text(title, style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold)
+            }
+            Column(
+                modifier = Modifier.fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                when (page) {
+                    SettingsPage.UPDATE -> UpdateCard(
+                        state = updateState,
+                        onCheck = updateViewModel::checkForUpdates,
+                        onDownload = updateViewModel::downloadUpdate,
+                        onInstall = ::installUpdate,
+                    )
+                    SettingsPage.MAIL -> Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(18.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text(if (mailState.configured) "Подключённый аккаунт" else "Почта не подключена",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold)
+                            Text(if (mailState.configured) mailState.username
+                                else "Подключите аккаунт на вкладке «Почта».",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (mailState.configured) {
+                                OutlinedButton(onClick = mailViewModel::logout) {
+                                    Icon(painterResource(R.drawable.ic_mail_logout),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.size(8.dp))
+                                    Text("Выйти из почты")
+                                }
+                            }
+                        }
+                    }
+                    SettingsPage.LOGS -> Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(18.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text("Журнал диагностики",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold)
+                            Text("Журнал сохраняется после обновлений. В него не записываются пароли, 2FA-коды, cookie или токены.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            OutlinedButton(onClick = {
+                                val data = diagnostics.readText().ifBlank {
+                                    "Журнал диагностики пока пуст."
+                                }
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
+                                    as ClipboardManager
+                                clipboard.setPrimaryClip(
+                                    ClipData.newPlainText("MPEI Neo diagnostics", data))
+                                logCopied = true
+                                diagnostics.log("DIAGNOSTICS", "log copied to clipboard")
+                            }) {
+                                Text(if (logCopied) "Скопировано" else "Копировать журнал")
+                            }
+                            OutlinedButton(onClick = {
+                                diagnostics.clear()
+                                diagnostics.log("DIAGNOSTICS", "log cleared by user")
+                                logCopied = false
+                            }) { Text("Очистить журнал") }
+                        }
+                    }
+                    SettingsPage.STORAGE -> Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(18.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text("Сохранённые расписания",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold)
+                            Text("Сохранённые недели доступны без повторной загрузки и при проблемах с сетью.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            OutlinedButton(onClick = {
+                                onClearCache()
+                                cacheCleared = true
+                            }) {
+                                Icon(Icons.Default.Delete, contentDescription = null)
+                                Spacer(Modifier.size(8.dp))
+                                Text(if (cacheCleared) "Кэш очищен" else "Очистить кэш")
+                            }
+                        }
+                    }
+                    SettingsPage.ABOUT -> Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(18.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text("$appName ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold)
+                            Text("Неофициальный клиент МЭИ. Пароль и 2FA-коды БАРС приложение не сохраняет; аналитики нет.")
+                            Text("На Android 12+ цвета интерфейса берутся из системной палитры Material You (Monet).",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    SettingsPage.HOME -> Unit
+                }
+                Spacer(Modifier.size(24.dp))
+            }
+        }
     }
 }
 
