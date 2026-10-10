@@ -171,7 +171,6 @@ fun MpeiNeoApp(viewModel: MainViewModel) {
             state = pager,
             modifier = Modifier.fillMaxSize().padding(innerPadding),
             userScrollEnabled = nativeSwipeAllowed,
-            beyondBoundsPageCount = 1,
             key = { AppTab.entries[it].name },
         ) { page ->
             val destination = AppTab.entries[page]

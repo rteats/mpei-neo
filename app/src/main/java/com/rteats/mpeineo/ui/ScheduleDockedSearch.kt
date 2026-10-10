@@ -353,7 +353,7 @@ internal fun ScheduleDockedSearch(
                         Brush.verticalGradient(
                             colors = listOf(
                                 Color.Transparent,
-                                MaterialTheme.colorScheme.shadow.copy(alpha = 0.045f),
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.045f),
                                 MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
                             ),
                         ),
