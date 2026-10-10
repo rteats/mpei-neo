@@ -1,36 +1,36 @@
 package com.rteats.mpeineo.ui
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Surface
-import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -38,78 +38,98 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.rteats.mpeineo.BuildConfig
 import com.rteats.mpeineo.MpeiNeoApplication
 import com.rteats.mpeineo.R
+import com.rteats.mpeineo.data.MailNotificationPreferences
+import com.rteats.mpeineo.data.MailNotificationScheduler
 
-
-private enum class SettingsPage { HOME, UPDATE, MAIL, LOGS, STORAGE, ABOUT }
-
-private data class SettingsLink(
-    val title: String,
-    val subtitle: String,
-    val icon: Int,
-    val page: SettingsPage,
-)
-
-/** Tonal grouped rows with accent-circle icons, inspired by EasyNotes' layout. */
+/**
+ * EasyNotes-inspired surface rows, circular accent badges and trailing
+ * switches/actions. Original Compose implementation using Material You colors.
+ */
 @Composable
-private fun SettingsGroup(
-    links: List<SettingsLink>,
-    onOpen: (SettingsPage) -> Unit,
+private fun SettingsBadge(iconRes: Int, inverted: Boolean = false) {
+    Surface(
+        modifier = Modifier.size(44.dp),
+        shape = CircleShape,
+        color = if (inverted) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = if (inverted) MaterialTheme.colorScheme.onPrimary
+            else MaterialTheme.colorScheme.primary,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(painterResource(iconRes), contentDescription = null,
+                modifier = Modifier.size(23.dp))
+        }
+    }
+}
+
+@Composable
+private fun SettingsExpansion(
+    title: String,
+    subtitle: String,
+    iconRes: Int,
+    expanded: Boolean,
+    onExpand: () -> Unit,
+    content: @Composable () -> Unit,
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceContainer,
         shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().animateContentSize(),
     ) {
         Column {
-            links.forEachIndexed { index, link ->
-                Row(
-                    modifier = Modifier.fillMaxWidth()
-                        .clickable { onOpen(link.page) }
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(link.title, style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold)
-                        Text(link.subtitle, style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Surface(
-                        modifier = Modifier.size(48.dp),
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(painterResource(link.icon), contentDescription = null,
-                                modifier = Modifier.size(24.dp))
-                        }
-                    }
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onExpand)
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(title, style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold)
+                    Text(subtitle, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
-                if (index != links.lastIndex) {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                    )
+                SettingsBadge(iconRes, inverted = expanded)
+                Icon(
+                    if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (expanded) "Свернуть" else "Развернуть",
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+            AnimatedVisibility(visible = expanded) {
+                Column(
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    content()
                 }
             }
         }
@@ -117,12 +137,57 @@ private fun SettingsGroup(
 }
 
 @Composable
-private fun SettingsGroupTitle(title: String) {
-    Text(
-        title, color = MaterialTheme.colorScheme.primary,
-        style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(start = 8.dp, top = 12.dp, bottom = 4.dp),
-    )
+private fun SettingsAction(
+    title: String,
+    detail: String,
+    iconRes: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SettingsBadge(iconRes)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.bodyLarge)
+            Text(detail, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun SettingsSwitchRow(
+    title: String,
+    description: String,
+    iconRes: Int,
+    checked: Boolean,
+    enabled: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(enabled = enabled) { onChange(!checked) }
+            .padding(horizontal = 10.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SettingsBadge(iconRes)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold)
+            Text(description, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, enabled = enabled, onCheckedChange = onChange)
+    }
 }
 
 @Composable
@@ -133,231 +198,247 @@ internal fun SettingsScreen(
     active: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    var page by remember { mutableStateOf(SettingsPage.HOME) }
-    var cacheCleared by remember { mutableStateOf(false) }
-    var logCopied by remember { mutableStateOf(false) }
-    val updateState by updateViewModel.state.collectAsState()
-    val mailState by mailViewModel.state.collectAsState()
     val context = LocalContext.current
     val diagnostics = (context.applicationContext as MpeiNeoApplication).container.diagnostics
-    val appName = if (BuildConfig.UPDATE_CHANNEL == "dev") "MPEI Neo Dev" else "MPEI Neo"
+    val mailState by mailViewModel.state.collectAsState()
+    val updateState by updateViewModel.state.collectAsState()
 
-    BackHandler(enabled = active && page != SettingsPage.HOME) {
-        page = SettingsPage.HOME
+    // One scrollable screen; each category expands inline rather than navigating.
+    var mailExpanded by rememberSaveable { mutableStateOf(true) }
+    var updatesExpanded by rememberSaveable { mutableStateOf(false) }
+    var storageExpanded by rememberSaveable { mutableStateOf(false) }
+    var logsExpanded by rememberSaveable { mutableStateOf(false) }
+    var aboutExpanded by rememberSaveable { mutableStateOf(false) }
+    var copied by remember { mutableStateOf(false) }
+    var cacheCleared by remember { mutableStateOf(false) }
+    var notificationError by remember { mutableStateOf<String?>(null) }
+    val notificationPrefs = remember(context) { MailNotificationPreferences(context) }
+    var notificationsEnabled by remember { mutableStateOf(notificationPrefs.enabled) }
+    var pollMinutes by remember { mutableStateOf(notificationPrefs.intervalMinutes) }
+
+    LaunchedEffect(mailState.configured) {
+        if (!mailState.configured) notificationsEnabled = false
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult(),
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted && mailState.configured) {
+            MailNotificationScheduler.setEnabled(context, true)
+            notificationsEnabled = true
+            notificationError = null
+        } else {
+            notificationError = "Разрешите уведомления для MPEI Neo в настройках Android."
+        }
+    }
+
+    fun toggleNotifications(on: Boolean) {
+        if (!on) {
+            MailNotificationScheduler.setEnabled(context, false)
+            notificationsEnabled = false
+            notificationError = null
+        } else if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            MailNotificationScheduler.setEnabled(context, true)
+            notificationsEnabled = true
+            notificationError = null
+        }
+    }
+
+    val installPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
     ) {
         if (context.packageManager.canRequestPackageInstalls()) {
             updateViewModel.installDownloadedUpdate(context)
         }
     }
-    fun installUpdate() {
+    fun installDownloadedUpdate() {
         if (context.packageManager.canRequestPackageInstalls()) {
             updateViewModel.installDownloadedUpdate(context)
         } else {
-            permissionLauncher.launch(
-                Intent(
-                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                    Uri.parse("package:${context.packageName}"),
-                ),
+            installPermissionLauncher.launch(
+                Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:" + context.packageName)),
             )
         }
     }
 
-    if (page == SettingsPage.HOME) {
-        LazyColumn(
-            modifier = modifier.fillMaxSize().testTag("settings-overview"),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                start = 16.dp, end = 16.dp, top = 24.dp, bottom = 36.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item {
-                Text("Настройки", style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold)
-                Text("Приложение, подключения и данные",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium)
-            }
-            item {
-                Surface(
-                    onClick = { page = SettingsPage.UPDATE },
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    shape = MaterialTheme.shapes.extraLarge,
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 22.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(appName, style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold)
-                            Text("Версия ${BuildConfig.VERSION_NAME} · обновления",
-                                style = MaterialTheme.typography.bodyMedium)
+    LazyColumn(
+        modifier = modifier.fillMaxSize().testTag("settings-overview"),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 22.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        item {
+            Text("Настройки", style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold)
+        }
+        item {
+            SettingsExpansion(
+                "Почта МЭИ",
+                if (mailState.configured) mailState.username else "Аккаунт не подключён",
+                R.drawable.ic_nav_mail,
+                mailExpanded, { mailExpanded = !mailExpanded },
+            ) {
+                SettingsSwitchRow(
+                    "Уведомления о новых письмах",
+                    "Фоновая проверка IMAP, без постоянного подключения",
+                    R.drawable.ic_nav_mail,
+                    notificationsEnabled, mailState.configured,
+                    ::toggleNotifications,
+                )
+                if (notificationsEnabled && mailState.configured) {
+                    Text("Интервал проверки",
+                        modifier = Modifier.padding(start = 12.dp, top = 4.dp),
+                        style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp)) {
+                        listOf(15, 30, 60).forEach { minutes ->
+                            FilterChip(
+                                selected = pollMinutes == minutes,
+                                onClick = {
+                                    pollMinutes = minutes
+                                    MailNotificationScheduler.changeInterval(context, minutes)
+                                },
+                                label = { Text(minutes.toString() + " мин") },
+                            )
                         }
-                        Icon(Icons.Default.ArrowForward, contentDescription = null)
                     }
-                }
-            }
-            item { SettingsGroupTitle("АККАУНТЫ") }
-            item {
-                SettingsGroup(
-                    listOf(SettingsLink(
-                        "Почта МЭИ",
-                        if (mailState.configured) mailState.username else "Аккаунт не подключён",
-                        R.drawable.ic_nav_mail, SettingsPage.MAIL,
-                    )),
-                    onOpen = { page = it },
-                )
-            }
-            item { SettingsGroupTitle("ПРИЛОЖЕНИЕ") }
-            item {
-                SettingsGroup(
-                    listOf(
-                        SettingsLink("Локальный кэш", "Сохранённые недели расписания",
-                            R.drawable.ic_settings_update, SettingsPage.STORAGE),
-                        SettingsLink("Диагностика", "Журнал событий и ошибок",
-                            R.drawable.ic_settings_diagnostics, SettingsPage.LOGS),
-                    ),
-                    onOpen = { page = it },
-                )
-            }
-            item { SettingsGroupTitle("ИНФОРМАЦИЯ") }
-            item {
-                SettingsGroup(
-                    listOf(SettingsLink("О приложении", "Версия и конфиденциальность",
-                        R.drawable.ic_nav_bars, SettingsPage.ABOUT)),
-                    onOpen = { page = it },
-                )
-            }
-        }
-    } else {
-        val title = when (page) {
-            SettingsPage.UPDATE -> "Обновления"
-            SettingsPage.MAIL -> "Почта МЭИ"
-            SettingsPage.LOGS -> "Диагностика"
-            SettingsPage.STORAGE -> "Локальный кэш"
-            SettingsPage.ABOUT -> "О приложении"
-            SettingsPage.HOME -> "Настройки"
-        }
-        Column(modifier = modifier.fillMaxSize().testTag("settings-detail")) {
-            Row(
-                modifier = Modifier.fillMaxWidth()
-                    .padding(start = 8.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                IconButton(onClick = { page = SettingsPage.HOME }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Вернуться к настройкам")
-                }
-                Text(title, style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold)
-            }
-            Column(
-                modifier = Modifier.fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                when (page) {
-                    SettingsPage.UPDATE -> UpdateCard(
-                        state = updateState,
-                        onCheck = updateViewModel::checkForUpdates,
-                        onDownload = updateViewModel::downloadUpdate,
-                        onInstall = ::installUpdate,
+                    Text(
+                        "Android может откладывать проверки ради экономии батареи.",
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
                     )
-                    SettingsPage.MAIL -> Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(18.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text(if (mailState.configured) "Подключённый аккаунт" else "Почта не подключена",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold)
-                            Text(if (mailState.configured) mailState.username
-                                else "Подключите аккаунт на вкладке «Почта».",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            if (mailState.configured) {
-                                OutlinedButton(onClick = mailViewModel::logout) {
-                                    Icon(painterResource(R.drawable.ic_mail_logout),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.size(8.dp))
-                                    Text("Выйти из почты")
-                                }
-                            }
-                        }
-                    }
-                    SettingsPage.LOGS -> Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(18.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text("Журнал диагностики",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold)
-                            Text("Журнал сохраняется после обновлений. В него не записываются пароли, 2FA-коды, cookie или токены.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            OutlinedButton(onClick = {
-                                val data = diagnostics.readText().ifBlank {
-                                    "Журнал диагностики пока пуст."
-                                }
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
-                                    as ClipboardManager
-                                clipboard.setPrimaryClip(
-                                    ClipData.newPlainText("MPEI Neo diagnostics", data))
-                                logCopied = true
-                                diagnostics.log("DIAGNOSTICS", "log copied to clipboard")
-                            }) {
-                                Text(if (logCopied) "Скопировано" else "Копировать журнал")
-                            }
-                            OutlinedButton(onClick = {
-                                diagnostics.clear()
-                                diagnostics.log("DIAGNOSTICS", "log cleared by user")
-                                logCopied = false
-                            }) { Text("Очистить журнал") }
-                        }
-                    }
-                    SettingsPage.STORAGE -> Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(18.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text("Сохранённые расписания",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold)
-                            Text("Сохранённые недели доступны без повторной загрузки и при проблемах с сетью.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            OutlinedButton(onClick = {
-                                onClearCache()
-                                cacheCleared = true
-                            }) {
-                                Icon(Icons.Default.Delete, contentDescription = null)
-                                Spacer(Modifier.size(8.dp))
-                                Text(if (cacheCleared) "Кэш очищен" else "Очистить кэш")
-                            }
-                        }
-                    }
-                    SettingsPage.ABOUT -> Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(18.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text("$appName ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold)
-                            Text("Неофициальный клиент МЭИ. Пароль и 2FA-коды БАРС приложение не сохраняет; аналитики нет.")
-                            Text("На Android 12+ цвета интерфейса берутся из системной палитры Material You (Monet).",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                    SettingsPage.HOME -> Unit
                 }
-                Spacer(Modifier.size(24.dp))
+                notificationError?.let { error ->
+                    Text(error, modifier = Modifier.padding(horizontal = 12.dp),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                if (mailState.configured) {
+                    SettingsAction(
+                        "Выйти из почты",
+                        "Отключить почту и остановить проверку новых писем",
+                        R.drawable.ic_mail_logout,
+                        onClick = {
+                            mailViewModel.logout()
+                            notificationsEnabled = false
+                        },
+                    )
+                } else {
+                    Text("Для настройки уведомлений войдите в почту на вкладке «Почта».",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium)
+                }
             }
         }
+
+        item {
+            SettingsExpansion(
+                "Обновления приложения",
+                "Версия " + BuildConfig.VERSION_NAME + " · канал " + BuildConfig.UPDATE_CHANNEL,
+                R.drawable.ic_settings_update,
+                updatesExpanded, { updatesExpanded = !updatesExpanded },
+            ) {
+                UpdateCard(updateState, updateViewModel::checkForUpdates,
+                    updateViewModel::downloadUpdate, ::installDownloadedUpdate)
+            }
+        }
+        item {
+            SettingsExpansion(
+                "Локальный кэш",
+                "Расписание доступно без сети",
+                R.drawable.ic_settings_update,
+                storageExpanded, { storageExpanded = !storageExpanded },
+            ) {
+                SettingsAction(
+                    if (cacheCleared) "Кэш очищен" else "Очистить кэш",
+                    "Удалить сохранённые недели расписания",
+                    R.drawable.ic_settings_update,
+                    onClick = { onClearCache(); cacheCleared = true },
+                )
+            }
+        }
+        item {
+            SettingsExpansion(
+                "Диагностика",
+                "Копирование и очистка журнала",
+                R.drawable.ic_settings_diagnostics,
+                logsExpanded, { logsExpanded = !logsExpanded },
+            ) {
+                SettingsAction(
+                    if (copied) "Скопировано" else "Копировать журнал",
+                    "Скопировать диагностические события",
+                    R.drawable.ic_settings_diagnostics,
+                    onClick = {
+                        val content = diagnostics.readText().ifBlank { "Журнал пока пуст." }
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
+                            as ClipboardManager
+                        clipboard.setPrimaryClip(
+                            ClipData.newPlainText("MPEI Neo diagnostics", content))
+                        copied = true
+                        diagnostics.log("DIAGNOSTICS", "log copied to clipboard")
+                    },
+                )
+                SettingsAction("Очистить журнал", "Удалить диагностические события",
+                    R.drawable.ic_settings_diagnostics,
+                    onClick = {
+                        diagnostics.clear()
+                        diagnostics.log("DIAGNOSTICS", "log cleared by user")
+                        copied = false
+                    },
+                )
+            }
+        }
+        item {
+            SettingsExpansion(
+                "О приложении",
+                "MPEI Neo · " + BuildConfig.VERSION_NAME,
+                R.drawable.ic_nav_bars,
+                aboutExpanded, { aboutExpanded = !aboutExpanded },
+            ) {
+                Text(
+                    "MPEI Neo " + BuildConfig.VERSION_NAME + " (" +
+                        BuildConfig.VERSION_CODE + ")",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    "Неофициальный клиент МЭИ. Пароли и коды 2FA БАРС не сохраняются. " +
+                        "Цвета интерфейса берутся из палитры Material You.",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun SettingsActionButton(
+    onClick: () -> Unit,
+    content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            content = content,
+        )
     }
 }
 
@@ -369,7 +450,11 @@ private fun UpdateCard(
     onDownload: () -> Unit,
     onInstall: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = MaterialTheme.shapes.large,
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -409,7 +494,7 @@ private fun UpdateCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    OutlinedButton(onClick = onCheck) {
+                    SettingsActionSettingsActionButton(onClick = onCheck) {
                         Text("Проверить обновления")
                     }
                 }
@@ -437,7 +522,7 @@ private fun UpdateCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    OutlinedButton(onClick = onCheck) {
+                    SettingsActionSettingsActionButton(onClick = onCheck) {
                         Text("Проверить снова")
                     }
                 }
@@ -459,7 +544,7 @@ private fun UpdateCard(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                    Button(onClick = onDownload) {
+                    SettingsActionButton(onClick = onDownload) {
                         Text("Скачать обновление")
                     }
                 }
@@ -490,7 +575,7 @@ private fun UpdateCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Button(onClick = onInstall) {
+                    SettingsActionButton(onClick = onInstall) {
                         Text("Установить обновление")
                     }
                 }
@@ -502,11 +587,11 @@ private fun UpdateCard(
                         color = MaterialTheme.colorScheme.error,
                     )
                     if (state.release != null) {
-                        OutlinedButton(onClick = onDownload) {
+                        SettingsActionSettingsActionButton(onClick = onDownload) {
                             Text("Повторить загрузку")
                         }
                     } else {
-                        OutlinedButton(onClick = onCheck) {
+                        SettingsActionSettingsActionButton(onClick = onCheck) {
                             Text("Повторить проверку")
                         }
                     }
