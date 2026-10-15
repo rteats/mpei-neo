@@ -7,6 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.activity.ComponentActivity
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -42,6 +43,8 @@ class MainActivity : ComponentActivity() {
         readMailTarget(intent)
     }
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Native system launch animation; installs the regular Activity theme before Compose.
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         readMailTarget(intent)

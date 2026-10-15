@@ -1,0 +1,5 @@
+<resources>
+    <!-- Keep the dark launch surface neutral and the glyph lighter. -->
+    <color name="splash_background">@android:color/system_neutral2_900</color>
+    <color name="splash_icon_tint">@android:color/system_accent1_200</color>
+</resources>

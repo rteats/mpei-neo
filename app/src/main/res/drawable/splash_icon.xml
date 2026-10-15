@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Same Material Symbols building as the launcher icon, but single-color for Monet. -->
+<!-- 288dp without an icon background; building fits within the 192dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960"
+    android:tint="@color/splash_icon_tint">
+    <group
+        android:pivotX="480"
+        android:pivotY="480"
+        android:scaleX="0.54"
+        android:scaleY="0.54"
+        android:translateY="22">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M200,680v-280h80v280h-80Zm240,0v-280h80v280h-80ZM80,840v-80h800v80H80Zm600,-160v-280h80v280h-80ZM80,320v-80l400,-200 400,200v80H80Zm178,-80h444,-444Zm0,0h444L480,130 258,240Z" />
+    </group>
+</vector>
