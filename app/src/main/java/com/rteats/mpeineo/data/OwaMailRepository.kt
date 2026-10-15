@@ -191,19 +191,19 @@ class OwaMailRepository(
                 val id = item.optJSONObject("ConversationId")?.optString("Id").orEmpty()
                 if (id.isEmpty()) return@mapNotNull null
                 val senders = item.optJSONArray("UniqueSenders")
-                val recipients = item.optJSONArray("UniqueRecipients")
+                val recipients = if (folder == OwaMailFolder.SENT)
+                    OwaSentRecipients.names(item) else emptyList()
                 MailSummary(
                     uid = stableId(id),
                     uidValidity = OWA_UID_VALIDITY,
-                    sender = (if (folder == OwaMailFolder.SENT) {
-                        recipients?.optString(0)?.takeIf { it.isNotBlank() }
-                    } else null) ?: senders?.optString(0).orEmpty(),
+                    sender = senders?.optString(0).orEmpty(),
                     subject = item.optString("ConversationTopic"),
                     sentAt = parseDate(item.optString("LastDeliveryTime")),
                     unread = folder == OwaMailFolder.INBOX &&
                         item.optInt("UnreadCount", 0) > 0,
                     hasAttachment = item.optBoolean("HasAttachments"),
                     owaConversationId = id,
+                    recipients = recipients,
                 )
             }
             activeAccount = account
@@ -249,6 +249,33 @@ class OwaMailRepository(
         val body = response.optJSONObject("Body") ?: throw ServiceFailure("people_missing_body")
         verifyResponse(body)
         return OwaRecipientDirectory.parse(response)
+    }
+
+    /**
+     * ConversationListView does not reliably include ToRecipients on Exchange
+     * 2013. Enrich sent rows from their actual messages, batched by ten.
+     * No email addresses or subjects are written to diagnostics.
+     */
+    suspend fun sentRecipientNames(summaries: List<MailSummary>): Map<Long, List<String>> {
+        val pending = summaries.filter { it.recipients.isNullOrEmpty() &&
+            !it.owaConversationId.isNullOrBlank() }.take(10)
+        if (pending.isEmpty()) return emptyMap()
+        val ids = pending.mapNotNull { it.owaConversationId }
+        val response = service("GetConversationItems", "GetConversationItemsAction",
+            OwaSentRecipients.request(ids))
+        val parsed = OwaSentRecipients.parseBatch(response, ids)
+        val found = pending.mapNotNull { summary ->
+            val names = parsed[summary.owaConversationId].orEmpty()
+            if (names.isEmpty()) null else summary.uid to names
+        }.toMap()
+        if (found.isNotEmpty()) {
+            val account = activeAccount ?: cachedAccountKey()
+            if (account != null) withContext(Dispatchers.IO) {
+                cache.updateSentRecipients(account, found)
+            }
+        }
+        diagnostics.log("OWA_MAIL", "sent_recipients requested=${pending.size} resolved=${found.size}")
+        return found
     }
 
     /** Mark a conversation read only when the Exchange service confirms NoError.
@@ -359,6 +386,7 @@ class OwaMailRepository(
         val nodes = response.optJSONObject("Conversation")?.optJSONArray("ConversationNodes")
             ?: throw ServiceFailure("missing_message_nodes")
         val thread = mutableListOf<MailThreadMessage>()
+        var latestRecipients = summary.recipients
         val foundAttachments = mutableListOf<MailAttachment>()
         var anyTruncated = false
         for (i in 0 until nodes.length()) {
@@ -374,6 +402,8 @@ class OwaMailRepository(
                     ?: item.optJSONObject("Sender")?.optJSONObject("Mailbox")
                 val sender = mailbox?.optString("Name")?.takeIf { it.isNotBlank() }
                     ?: mailbox?.optString("EmailAddress").orEmpty()
+                val recipients = OwaSentRecipients.names(item)
+                if (recipients.isNotEmpty()) latestRecipients = recipients
                 thread.add(MailThreadMessage(
                     sender.ifBlank { summary.sender },
                     item.optString("Subject").ifBlank { summary.subject },
@@ -404,6 +434,7 @@ class OwaMailRepository(
             uid = summary.uid, sender = recent.sender, subject = recent.subject,
             sentAt = recent.sentAt, body = recent.body,
             attachments = foundAttachments, threadMessages = ordered,
+            recipients = latestRecipients,
         )
         activeAccount?.let { account ->
             withContext(Dispatchers.IO) {

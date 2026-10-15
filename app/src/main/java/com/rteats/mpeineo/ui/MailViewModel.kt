@@ -80,6 +80,19 @@ internal fun mergeOwaInboxPages(
     older: List<MailSummary>,
 ): List<MailSummary> = (existing + older).distinctBy { it.uidValidity to it.uid }
 
+/** Preserve previously fetched recipients when a refreshed sent page omits To. */
+internal fun mergeOwaSentPages(
+    incoming: List<MailSummary>,
+    cached: List<MailSummary>,
+): List<MailSummary> {
+    val byId = cached.associateBy { it.uidValidity to it.uid }
+    return (incoming + cached).distinctBy { it.uidValidity to it.uid }.map { message ->
+        if (!message.recipients.isNullOrEmpty()) message
+        else byId[message.uidValidity to message.uid]?.recipients
+            ?.takeIf { it.isNotEmpty() }?.let { message.copy(recipients = it) } ?: message
+    }
+}
+
 private const val MAIL_PAGE_SIZE = 60
 
 /** Native mail reads and refreshes exclusively through OWA. */
@@ -94,6 +107,33 @@ internal class MailViewModel(
     private var refreshSequence = 0L
     private var pendingNotification: Pair<Long, Long>? = null
     private var recipientJob: Job? = null
+    private var sentRecipientJob: Job? = null
+
+    private fun hydrateSentRecipients(items: List<MailSummary>) {
+        sentRecipientJob?.cancel()
+        val version = sessionVersion
+        sentRecipientJob = viewModelScope.launch {
+            for (batch in items.filter { it.recipients.isNullOrEmpty() }.chunked(10)) {
+                val resolved = try {
+                    owaMailRepository.sentRecipientNames(batch)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    repository.logState("OWA sent recipients unavailable type=" +
+                        failure.javaClass.simpleName)
+                    emptyMap()
+                }
+                if (version != sessionVersion) return@launch
+                if (resolved.isNotEmpty()) {
+                    _state.update { current ->
+                        current.copy(sentItems = current.sentItems.map { item ->
+                            resolved[item.uid]?.let { item.copy(recipients = it) } ?: item
+                        })
+                    }
+                }
+            }
+        }
+    }
 
     init {
         val cached = owaMailRepository.cachedInbox()
@@ -272,7 +312,7 @@ internal class MailViewModel(
                     val seen = old.sentItems.mapTo(HashSet()) { it.uidValidity to it.uid }
                     val newItems = page.count { (it.uidValidity to it.uid) !in seen }
                     old.copy(
-                        sentItems = mergeOwaInboxPages(page, old.sentItems),
+                        sentItems = mergeOwaSentPages(page, old.sentItems),
                         sentLoaded = true, sentLoading = false,
                         sentHasMore = if (old.sentItems.size >= MAIL_PAGE_SIZE && !old.sentHasMore)
                             false else page.size == MAIL_PAGE_SIZE,
@@ -281,6 +321,7 @@ internal class MailViewModel(
                         sentMoreError = false, loginRequired = false,
                     )
                 }
+                hydrateSentRecipients(_state.value.sentItems)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
@@ -310,11 +351,12 @@ internal class MailViewModel(
                 if (version != sessionVersion ||
                     _state.value.sentNextPageOffset != offset) return@launch
                 _state.update { it.copy(
-                    sentItems = mergeOwaInboxPages(it.sentItems, page),
+                    sentItems = mergeOwaSentPages(page, it.sentItems),
                     sentNextPageOffset = offset + page.size,
                     sentHasMore = page.size == MAIL_PAGE_SIZE,
                     sentLoadingMore = false, sentMoreError = false,
                 ) }
+                hydrateSentRecipients(_state.value.sentItems)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
@@ -345,6 +387,11 @@ internal class MailViewModel(
                     if (current.selected?.uid != summary.uid ||
                         current.selected?.uidValidity != summary.uidValidity) current
                     else current.copy(message = detail, loadingMessage = false,
+                        sentItems = if (current.mailbox == OwaMailFolder.SENT &&
+                            !detail.recipients.isNullOrEmpty()) current.sentItems.map { row ->
+                                if (row.uid == summary.uid) row.copy(recipients = detail.recipients)
+                                else row
+                            } else current.sentItems,
                         notice = null)
                 }
                 if (summary.unread && _state.value.mailbox == OwaMailFolder.INBOX &&
@@ -605,6 +652,7 @@ internal class MailViewModel(
         sessionVersion++
         pendingNotification = null
         recipientJob?.cancel()
+        sentRecipientJob?.cancel()
         viewModelScope.coroutineContext.cancelChildren()
         MailNotificationScheduler.stopAndClear(repository.contextForNotifications)
         repository.credentials.clear()

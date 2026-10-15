@@ -1247,7 +1247,7 @@ private fun BarsNativeDashboard(
             }
           }
           item(key = "profile") {
-            BarsUserHeader(state = state)
+            BarsUserHeader(state = state, onOpenBrowser = onOpenBrowser)
           }
 
           state.error?.takeIf {
@@ -1334,6 +1334,7 @@ private fun BarsNativeDashboard(
 @Composable
 private fun BarsUserHeader(
   state: BarsUiState,
+  onOpenBrowser: () -> Unit,
 ) {
   var showMore by rememberSaveable { mutableStateOf(false) }
   val extras = remember(state.rawMain) { BarsReportParser.parseMain(state.rawMain) }
@@ -1354,26 +1355,33 @@ private fun BarsUserHeader(
       .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp),
     verticalArrangement = Arrangement.spacedBy(10.dp),
   ) {
-    Column(
-      modifier = Modifier.padding(horizontal = 4.dp),
-      verticalArrangement = Arrangement.spacedBy(4.dp),
+    Row(
+      modifier = Modifier.fillMaxWidth().padding(start = 4.dp),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-      Text(
-        state.profileName.ifBlank { "Студент МЭИ" },
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.SemiBold,
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis,
-      )
-      val identity = listOf(state.profileGroup, state.semester)
-        .filter { it.isNotBlank() }.joinToString(" · ")
-      if (identity.isNotBlank()) {
+      Column(
+        modifier = Modifier.weight(1f),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+      ) {
         Text(
-          identity,
-          style = MaterialTheme.typography.bodyMedium,
-          color = colors.onSurfaceVariant,
+          state.profileName.ifBlank { "Студент МЭИ" },
+          style = MaterialTheme.typography.titleLarge,
+          fontWeight = FontWeight.SemiBold,
+          maxLines = 2,
+          overflow = TextOverflow.Ellipsis,
         )
+        val identity = listOf(state.profileGroup, state.semester)
+          .filter { it.isNotBlank() }.joinToString(" · ")
+        if (identity.isNotBlank()) {
+          Text(
+            identity,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.onSurfaceVariant,
+          )
+        }
       }
+      PortalHeaderAction(label = "БАРС", onClick = onOpenBrowser)
     }
 
     if (primary.isNotEmpty()) {

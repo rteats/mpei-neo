@@ -41,6 +41,7 @@ data class MailSummary(
     val unread: Boolean,
     val hasAttachment: Boolean,
     val owaConversationId: String? = null,
+    val recipients: List<String>? = null,
 )
 data class MailInboxSnapshot(val uidValidity: Long, val messages: List<MailSummary>)
 data class MailAttachment(
@@ -65,6 +66,7 @@ data class MailDetail(
     val body: String,
     val attachments: List<MailAttachment>,
     val threadMessages: List<MailThreadMessage> = emptyList(),
+    val recipients: List<String>? = null,
 )
 
 /** The password is never written in plaintext, the logs, or app backups. */

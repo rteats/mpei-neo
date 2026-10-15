@@ -57,9 +57,30 @@ internal class MailCache(private val context: Context) {
     @Synchronized fun saveOwaSentPage(username: String, page: List<MailSummary>, offset: Int) {
         synchronized(sharedOwaCacheLock) {
             val old = sent(username)?.messages.orEmpty()
-            val merged = if (offset == 0) page + old else old + page
-            val unique = merged.distinctBy { it.uidValidity to it.uid }.take(MAX_OWA_HEADERS)
-            write(file(username, "sent"), CachedInbox(0x4F5741L, unique))
+            val oldById = old.associateBy { it.uidValidity to it.uid }
+            val merged = (if (offset == 0) page + old else old + page)
+                .distinctBy { it.uidValidity to it.uid }
+                .take(MAX_OWA_HEADERS)
+                .map { message ->
+                    if (!message.recipients.isNullOrEmpty()) message
+                    else oldById[message.uidValidity to message.uid]
+                        ?.recipients?.takeIf { it.isNotEmpty() }
+                        ?.let { message.copy(recipients = it) } ?: message
+                }
+            write(file(username, "sent"), CachedInbox(0x4F5741L, merged))
+        }
+    }
+
+    @Synchronized fun updateSentRecipients(username: String, updates: Map<Long, List<String>>) {
+        if (updates.isEmpty()) return
+        synchronized(sharedOwaCacheLock) {
+            val old = sent(username) ?: return
+            val revised = old.messages.map { summary ->
+                updates[summary.uid]?.let { summary.copy(recipients = it) } ?: summary
+            }
+            if (revised != old.messages) {
+                write(file(username, "sent"), CachedInbox(old.uidValidity, revised))
+            }
         }
     }
 

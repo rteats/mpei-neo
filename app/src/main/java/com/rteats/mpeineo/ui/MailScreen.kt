@@ -105,6 +105,9 @@ internal fun MailScreen(
         state.sentMoreError else state.moreError
     val visibleMessages = if (inboxQuery.isBlank()) folderItems else folderItems.filter {
         it.sender.contains(inboxQuery.trim(), ignoreCase = true) ||
+            it.recipients.orEmpty().any { recipient ->
+                recipient.contains(inboxQuery.trim(), ignoreCase = true)
+            } ||
             it.subject.contains(inboxQuery.trim(), ignoreCase = true)
     }
     // Search is explicitly local to downloaded pages, not a server-wide search.
@@ -240,6 +243,7 @@ internal fun MailScreen(
                     if (reading) {
                         MailMessage(
                             state = state,
+                            isSent = state.mailbox == OwaMailFolder.SENT,
                             onDownload = viewModel::download,
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -267,6 +271,21 @@ internal fun MailScreen(
                                 ),
                                 verticalArrangement = Arrangement.spacedBy(5.dp),
                             ) {
+                                item(key = "mail-view-header") {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth()
+                                            .padding(start = 4.dp, end = 4.dp, top = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                    ) {
+                                        Text(
+                                            "Почта",
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                        PortalHeaderAction(label = "ОСЭП", onClick = onOpenPortal)
+                                    }
+                                }
                                 stickyHeader(key = "inbox-search") {
                                     Surface(color = MaterialTheme.colorScheme.background) {
                                     Column {
@@ -331,6 +350,7 @@ internal fun MailScreen(
                                 ) { item ->
                                     MailInboxRow(
                                         summary = item,
+                                        isSent = state.mailbox == OwaMailFolder.SENT,
                                         onClick = { viewModel.open(item) },
                                         modifier = Modifier,
                                     )
@@ -371,9 +391,13 @@ internal fun MailScreen(
 @Composable
 private fun MailInboxRow(
     summary: MailSummary,
+    isSent: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val correspondent = if (isSent) {
+        summary.recipients.orEmpty().joinToString(", ").ifBlank { "Получатель не определён" }
+    } else summary.sender.ifBlank { "Неизвестный отправитель" }
     Surface(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
@@ -392,7 +416,7 @@ private fun MailInboxRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            MailSenderAvatar(summary.sender, summary.unread)
+            MailSenderAvatar(correspondent, summary.unread)
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -403,7 +427,7 @@ private fun MailInboxRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        summary.sender.ifBlank { "Неизвестный отправитель" },
+                        if (isSent) "Кому: $correspondent" else correspondent,
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = if (summary.unread) {
@@ -460,10 +484,16 @@ private fun MailSenderAvatar(sender: String, unread: Boolean) {
 @Composable
 private fun MailMessage(
     state: MailUiState,
+    isSent: Boolean,
     onDownload: (com.rteats.mpeineo.data.MailAttachment) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val detail = state.message
+    val toRecipients = detail?.recipients?.takeIf { it.isNotEmpty() }
+        ?: state.selected?.recipients.orEmpty()
+    val correspondent = if (isSent) {
+        toRecipients.joinToString(", ").ifBlank { "Получатель не определён" }
+    } else detail?.sender.orEmpty()
     when {
         state.loadingMessage -> Box(modifier, contentAlignment = Alignment.Center) {
             ContainedLoadingIndicator()
@@ -487,13 +517,13 @@ private fun MailMessage(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                MailSenderAvatar(detail.sender, unread = false)
+                MailSenderAvatar(correspondent, unread = false)
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     Text(
-                        detail.sender,
+                        if (isSent) "Кому: $correspondent" else detail.sender,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                     )

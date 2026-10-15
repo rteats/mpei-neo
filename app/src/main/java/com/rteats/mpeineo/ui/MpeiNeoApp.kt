@@ -21,25 +21,19 @@ import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -494,46 +488,27 @@ fun MpeiNeoApp(
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
-                    val portalAction = if (active && !imeVisible) when (destination) {
-                        AppTab.BARS -> AppTab.BARS.takeIf {
-                            barsState.authStage == BarsAuthStage.AUTHENTICATED &&
-                                !barsState.browserVisible
-                        }
-                        AppTab.MAIL -> AppTab.MAIL.takeIf {
-                            !mailWebVisible && !mailState.composing
-                        }
-                        else -> null
-                    } else null
                     AnimatedVisibility(
-                        visible = portalAction != null,
+                        visible = destination == AppTab.MAIL && active &&
+                            !imeVisible && !mailWebVisible && mailState.configured &&
+                            !mailState.composing && mailState.selected == null,
                         modifier = Modifier.align(Alignment.BottomEnd)
                             .padding(end = 16.dp, bottom = 16.dp),
                         enter = fadeIn(tween(150)),
                         exit = fadeOut(tween(110)),
                     ) {
-                        if (portalAction == AppTab.MAIL) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                PortalFloatingButton(
-                                    label = "ОСЭП",
-                                    onClick = { mailWebVisible = true },
+                        ExtendedFloatingActionButton(
+                            onClick = mailViewModel::startCompose,
+                            modifier = Modifier.testTag("mail-compose-fab"),
+                            icon = {
+                                AppIcon(
+                                    AppIcons.Edit,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp),
                                 )
-                                if (mailState.configured) {
-                                    PortalFloatingButton(
-                                        label = "Написать",
-                                        icon = AppIcons.Edit,
-                                        onClick = mailViewModel::startCompose,
-                                    )
-                                }
-                            }
-                        } else {
-                            PortalFloatingButton(
-                                label = "БАРС",
-                                onClick = {
-                                    barsBrowserJustClosed = false
-                                    barsViewModel.showBrowser()
-                                },
-                            )
-                        }
+                            },
+                            text = { Text("Написать") },
+                        )
                     }
                 }
             }
@@ -705,20 +680,6 @@ fun MpeiNeoApp(
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
-                AnimatedVisibility(
-                    visible = barsForeground && !imeVisible &&
-                        barsState.authStage == BarsAuthStage.AUTHENTICATED &&
-                        !barsState.browserVisible,
-                    modifier = Modifier.align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = 16.dp),
-                    enter = fadeIn(tween(150)),
-                    exit = fadeOut(tween(110)),
-                ) {
-                    PortalFloatingButton(label = "БАРС", onClick = {
-                        barsBrowserJustClosed = false
-                        barsViewModel.showBrowser()
-                    })
-                }
             }
 
             AnimatedVisibility(
@@ -750,49 +711,6 @@ fun MpeiNeoApp(
                     onSubmit = ::rememberGlobalQuery,
                 )
             }
-        }
-    }
-}
-
-/** The existing BARS and Mail browser buttons remain anchored to their pages. */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun PortalFloatingButton(
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    icon: Int = AppIcons.OpenPortal,
-) {
-    val height = ButtonDefaults.MediumContainerHeight
-    Button(
-        onClick = onClick,
-        modifier = modifier.heightIn(min = height).widthIn(min = 132.dp)
-            .testTag("portal-floating-" + label),
-        contentPadding = ButtonDefaults.contentPaddingFor(height),
-        shapes = ButtonDefaults.shapes(),
-    ) {
-        AppIcon(
-            icon = icon,
-            contentDescription = null,
-            modifier = Modifier.size(ButtonDefaults.iconSizeFor(height)),
-        )
-        Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(height)))
-        AnimatedContent(
-            targetState = label,
-            modifier = Modifier.widthIn(min = 48.dp),
-            transitionSpec = {
-                (slideInVertically(
-                    animationSpec = tween(190),
-                    initialOffsetY = { it / 2 },
-                ) + fadeIn(tween(160))) togetherWith
-                    (slideOutVertically(
-                        animationSpec = tween(150),
-                        targetOffsetY = { -it / 2 },
-                    ) + fadeOut(tween(120)))
-            },
-            label = "portal-action-label",
-        ) { currentLabel ->
-            Text(currentLabel, style = ButtonDefaults.textStyleFor(height))
         }
     }
 }
